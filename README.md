@@ -13,9 +13,11 @@ A grid shows a **view query** (columns, filter, search, sort, grouping, aggregat
 | `grid-layout` | Row and column axes, pinned regions, 64-bit scrolling, hit testing. |
 | `grid-interact` | Active cell and ranges, keyboard navigation, row selection, the edit log. |
 | `grid-formats` | Delimited text in and out, typed parsing and formatting, import with type inference, paste. |
+| `ui` | The component library, re-exported at one pinned revision. |
+| `grid-gpui` | The view: state, one element painting the visible cells, pointer, keyboard and scrolling. |
 | `xtask` | Repository checks. |
 
-The view crate (`grid-gpui`), the `ui` re-export and the playground arrive with milestone 1; see `docs/status.md`.
+The view crates need the component library's system dependencies to build; the headless crates do not. A playground arrives next; see `docs/status.md`.
 
 ## Use
 
@@ -40,6 +42,7 @@ let page = source.fetch(&FetchRequest {   // or one window of one group
 
 ```sh
 cargo test            # headless crates; no GPU needed
+cargo test --workspace  # adds the view crate, in a headless window
 cargo clippy --all-targets -- -D warnings
 cargo xtask deps      # headless crates stay headless
 cargo xtask sizes     # every file under 20 KB
