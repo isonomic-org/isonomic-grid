@@ -167,6 +167,17 @@ impl GridView {
     }
 }
 
+impl GridView {
+    /// Selects the active cell's row or column, unless a cell is being
+    /// edited, where the keys for it type a space.
+    fn select_line(&mut self, row: bool, cx: &mut Context<Self>) {
+        self.state.update(cx, |state, cx| match state.editing() {
+            Some(_) => state.edit_line(|line| line.insert(" "), cx),
+            None => state.select_line(row, cx),
+        });
+    }
+}
+
 impl Focusable for GridView {
     fn focus_handle(&self, _: &App) -> FocusHandle {
         self.focus.clone()
@@ -224,6 +235,20 @@ impl Render for GridView {
             .on_action(
                 cx.listener(|this, _: &MoveToLastCell, _, cx| this.go(Move::LastCell, false, cx)),
             )
+            .on_action(cx.listener(|this, _: &MoveToTop, _, cx| this.go(Move::Top, false, cx)))
+            .on_action(
+                cx.listener(|this, _: &MoveToBottom, _, cx| this.go(Move::Bottom, false, cx)),
+            )
+            .on_action(cx.listener(|this, _: &SelectToTop, _, cx| this.go(Move::Top, true, cx)))
+            .on_action(
+                cx.listener(|this, _: &SelectToBottom, _, cx| this.go(Move::Bottom, true, cx)),
+            )
+            .on_action(
+                cx.listener(|this, _: &SelectToRowStart, _, cx| this.go(Move::Home, true, cx)),
+            )
+            .on_action(cx.listener(|this, _: &SelectToRowEnd, _, cx| this.go(Move::End, true, cx)))
+            .on_action(cx.listener(|this, _: &SelectRow, _, cx| this.select_line(true, cx)))
+            .on_action(cx.listener(|this, _: &SelectColumn, _, cx| this.select_line(false, cx)))
             .on_action(cx.listener(|this, _: &NextCell, _, cx| this.go(Move::Next, false, cx)))
             .on_action(
                 cx.listener(|this, _: &PreviousCell, _, cx| this.go(Move::Previous, false, cx)),

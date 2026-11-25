@@ -2,6 +2,12 @@
 
 Newest first.
 
+## 2026-11-25: keys for the ends of a column and whole rows and columns
+
+- The command key with an arrow goes to the first or last row of the column or the first or last column of the row; with Shift it extends the range there. Shift with Home or End extends along the row.
+- Shift with Space selects the active cell's row, Control with Space its column; in a cell being edited they type a space.
+- `docs/keys.md` lists every key and what the pointer does.
+
 ## 2026-11-25: columns move, hide, pin and fit
 
 - A press on a column's title that becomes a drag moves the column, live, to wherever the pointer is; a press that does not still sorts. `move_column`, `hide_column` and `show_column` do the same from code, and the selection, held by column ID, goes with its columns.

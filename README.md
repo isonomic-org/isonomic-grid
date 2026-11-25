@@ -54,6 +54,8 @@ cargo run -p grid-gpui --example playground
 
 Opens the grid in a window. `cargo run --release -p grid-gpui --example frames` times the grid's share of a frame while it scrolls. Both need the component library's system dependencies; on Linux those are the usual windowing, font and Vulkan development packages.
 
+Keys and pointer gestures are listed in `docs/keys.md`.
+
 ## Develop
 
 ```sh
