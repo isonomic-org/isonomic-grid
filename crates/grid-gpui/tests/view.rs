@@ -340,3 +340,74 @@ fn a_drag_selects_a_range_and_scrolls_past_the_edge(cx: &mut TestAppContext) {
     assert_eq!(range(&view, cx), stopped);
     assert_eq!(stopped.0, Cell { row: 1, column: 0 }, "the anchor never moved");
 }
+
+#[ui::test]
+fn the_selection_stays_on_its_rows_when_they_move(cx: &mut TestAppContext) {
+    let (view, cx) = open(cx, 50);
+    let picked = |view: &Entity<GridView>, cx: &mut VisualTestContext| {
+        let selection = view.read_with(cx, |view, cx| view.state().read(cx).selection().clone());
+        let range = selection.ranges.last().copied().unwrap();
+        let mut name = |row| text(view, cx, row, 0);
+        (name(selection.active.row), name(range.anchor.row), name(range.head.row))
+    };
+    // Rows 3 to 5, anchored on row 3.
+    click(&view, cx, 3, 0, Modifiers::none());
+    click(&view, cx, 5, 1, Modifiers::shift());
+    let before = picked(&view, cx);
+    assert_eq!(before, ("row 000003".into(), "row 000003".into(), "row 000005".into()));
+
+    // Sorting by N puts the last row first; the selection goes with its rows.
+    let header = view.read_with(cx, |view, _| view.header_point(2)).unwrap();
+    cx.simulate_click(header, Modifiers::none());
+    settle(cx);
+    assert_eq!(text(&view, cx, 0, 0), "row 000049");
+    assert_eq!(picked(&view, cx), before);
+    assert_eq!(active(&view, cx), Cell { row: 46, column: 0 });
+
+    // An edit that moves a row in the sort order takes the active cell along.
+    view.update(cx, |view, cx| {
+        view.state().update(cx, |state, cx| state.set_cell_text(46, 2, "0", cx).unwrap());
+    });
+    settle(cx);
+    assert_eq!(active(&view, cx), Cell { row: 0, column: 0 });
+    assert_eq!(picked(&view, cx).0, "row 000003");
+    keys(cx, "secondary-z");
+    assert_eq!(picked(&view, cx), before);
+
+    // Everything selected is still everything after the rows change.
+    keys(cx, "secondary-a");
+    cx.simulate_click(header, Modifiers::none());
+    settle(cx);
+    let all = view.read_with(cx, |view, cx| view.state().read(cx).selection().clone());
+    assert!(all.contains(Cell { row: 0, column: 0 }) && all.contains(Cell { row: 49, column: 2 }));
+}
+
+#[ui::test]
+fn a_selection_whose_row_is_filtered_out_falls_back_in_place(cx: &mut TestAppContext) {
+    use grid_core::{Compare, Filter, ViewQuery};
+    let (view, cx) = open(cx, 50);
+    click(&view, cx, 4, 1, Modifiers::none());
+    click(&view, cx, 40, 2, Modifiers::shift());
+    // Keep only rows whose N is above 20: row 4 stays, row 40 goes.
+    let filter =
+        Filter::Is { column: ColumnId::new("n"), compare: Compare::Gt, value: Value::Int(20) };
+    view.update(cx, |view, cx| {
+        let query = ViewQuery { filter: Some(filter), ..Default::default() };
+        view.state().update(cx, |state, cx| state.set_query(query, cx));
+    });
+    settle(cx);
+    let selection = view.read_with(cx, |view, cx| view.state().read(cx).selection().clone());
+    assert_eq!(selection.active, Cell { row: 4, column: 1 });
+    assert_eq!(selection.ranges, [grid_interact::CellRange::single(Cell { row: 4, column: 1 })]);
+    assert_eq!(text(&view, cx, 4, 0), "row 000004");
+
+    // With every row gone, the selection rests on the first cell and
+    // nothing panics.
+    view.update(cx, |view, cx| {
+        let query = ViewQuery { search: "no such text".into(), ..Default::default() };
+        view.state().update(cx, |state, cx| state.set_query(query, cx));
+    });
+    settle(cx);
+    keys(cx, "down right enter escape delete");
+    assert_eq!(active(&view, cx).row, 0);
+}

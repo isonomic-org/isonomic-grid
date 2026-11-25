@@ -13,6 +13,7 @@ use grid_query::{MemorySource, ViewResult, ViewRow};
 use ui::{Context, EventEmitter};
 
 use crate::edit::Editing;
+use crate::held::Held;
 
 /// A column's starting width, in rems.
 const COLUMN_REMS: f32 = 10.0;
@@ -39,6 +40,8 @@ pub struct GridState {
     /// Width of each visible column, in rems.
     widths: Vec<f32>,
     pub(crate) selection: Selection,
+    /// What the selection is on, by ID.
+    pub(crate) held: Held,
     pub(crate) editing: Option<Editing>,
     pub(crate) log: EditLog,
     pub(crate) scroll: (f64, f64),
@@ -51,18 +54,21 @@ impl EventEmitter<GridEvent> for GridState {}
 impl GridState {
     pub fn new(table: Table, _cx: &mut Context<Self>) -> Self {
         let columns: Vec<usize> = (0..table.specs().len()).collect();
-        Self {
+        let mut state = Self {
             widths: vec![COLUMN_REMS; columns.len()],
             columns,
             source: MemorySource::new(table),
             query: ViewQuery::default(),
             selection: Selection::at(Cell::default()),
+            held: Held::default(),
             editing: None,
             log: EditLog::new(UNDO_STEPS),
             scroll: (0.0, 0.0),
             row_pins: Pins::default(),
             column_pins: Pins::default(),
-        }
+        };
+        state.hold_selection();
+        state
     }
 
     pub fn table(&self) -> &Table {
@@ -155,13 +161,10 @@ impl GridState {
     }
 
     pub(crate) fn changed(&mut self, cx: &mut Context<Self>) {
-        let (rows, columns) = (self.row_count(), self.column_count());
-        let clamp = |cell: Cell| Cell {
-            row: cell.row.min(rows.saturating_sub(1)),
-            column: cell.column.min(columns.saturating_sub(1)),
-        };
-        if clamp(self.selection.active) != self.selection.active {
-            self.selection = Selection::at(clamp(self.selection.active));
+        self.restore_selection();
+        // An edit in progress is on the active cell, wherever its row went.
+        if let Some(editing) = &mut self.editing {
+            editing.cell = self.selection.active;
         }
         cx.emit(GridEvent::Changed);
         cx.notify();
@@ -223,6 +226,7 @@ impl GridState {
     ) -> Cell {
         let (rows, columns) = (self.row_count(), self.column_count());
         let to = self.selection.navigate(step, rows, columns, page, extend);
+        self.hold_selection();
         cx.emit(GridEvent::SelectionChanged);
         cx.notify();
         to
@@ -230,6 +234,7 @@ impl GridState {
 
     pub fn click(&mut self, cell: Cell, extend: bool, add: bool, cx: &mut Context<Self>) {
         self.selection.click(cell, extend, add);
+        self.hold_selection();
         cx.emit(GridEvent::SelectionChanged);
         cx.notify();
     }
@@ -239,6 +244,7 @@ impl GridState {
         let before = self.selection.ranges.last().copied();
         self.selection.drag_to(cell);
         if self.selection.ranges.last().copied() != before {
+            self.hold_selection();
             cx.emit(GridEvent::SelectionChanged);
             cx.notify();
         }
@@ -247,6 +253,8 @@ impl GridState {
     pub fn select_all(&mut self, cx: &mut Context<Self>) {
         let (rows, columns) = (self.row_count(), self.column_count());
         self.selection.select_all(rows, columns);
+        self.hold_selection();
+        self.held.all = true;
         cx.emit(GridEvent::SelectionChanged);
         cx.notify();
     }

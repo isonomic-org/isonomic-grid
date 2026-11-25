@@ -213,6 +213,7 @@ impl GridState {
                 let anchor = Cell { row: range.rows().0, column: range.columns().0 };
                 self.selection.click(anchor, false, false);
                 self.selection.click(head, true, false);
+                self.hold_selection();
                 cx.emit(GridEvent::SelectionChanged);
                 cx.notify();
             }
