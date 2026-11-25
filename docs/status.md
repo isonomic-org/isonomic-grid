@@ -17,7 +17,7 @@ macOS 15.7 on a 2.6 GHz six-core Intel laptop, native renderer, release build, t
 
 **What this means.** Milestone 0 asks for under 6 ms at 2,500 cells on this machine. With every line of text already shaped, 1,950 cells take 6.5 ms, about 3.3 µs a cell, which is 8 ms or more at 2,500. The time is the toolkit painting glyphs, one sprite lookup each, roughly 12,000 a frame; this grid's own work (reading cells, layout, the cache) is under a millisecond of it. Nothing left in this repository's code will close that gap.
 
-**What is not decided.** The specification names the fallback: rows kept as retained elements on the optional faster backend. That is a change of rendering path, not a tuning, and it has not been started. A grid of ordinary size is far inside the budget: 400 cells is about 1.5 ms.
+**What is not decided.** The specification names the fallback: rows kept as retained elements on the optional faster backend. That is a change of rendering path, not a tuning, and it has not been started. A grid of ordinary size should be far inside the budget: at the same cost a cell, 400 cells work out to about 1.5 ms. That size has not been measured.
 
 **Not measured:** a quiet machine, the renderer's own time, a real display.
 
