@@ -15,7 +15,7 @@ use ui::{
 
 use crate::actions::*;
 use crate::element::{Colors, GridElement, SharedFrame};
-use crate::pointer::Resize;
+use crate::pointer::Drag;
 use crate::scroll::GridScrollHandle;
 use crate::state::GridState;
 
@@ -24,7 +24,10 @@ pub struct GridView {
     pub(crate) state: Entity<GridState>,
     pub(crate) focus: FocusHandle,
     pub(crate) frame: SharedFrame,
-    pub(crate) resize: Option<Resize>,
+    pub(crate) drag: Option<Drag>,
+    /// Whether a drag held past an edge scrolled on the last step, and
+    /// so should take another when the grid is next drawn.
+    pub(crate) autoscroll: bool,
     /// Whether the pointer is over a column edge it could drag.
     pub(crate) over_edge: bool,
     scroll: GridScrollHandle,
@@ -38,7 +41,8 @@ impl GridView {
             state,
             focus: cx.focus_handle(),
             frame: SharedFrame::default(),
-            resize: None,
+            drag: None,
+            autoscroll: false,
             over_edge: false,
             scroll: GridScrollHandle::default(),
             _observe: observe,
@@ -170,7 +174,13 @@ impl Focusable for GridView {
 }
 
 impl Render for GridView {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if std::mem::take(&mut self.autoscroll) {
+            self.drag_select(cx);
+            if self.autoscroll {
+                window.request_animation_frame();
+            }
+        }
         let theme = cx.theme();
         let colors = Colors {
             background: theme.background,
@@ -187,7 +197,7 @@ impl Render for GridView {
             state: self.state.clone(),
             frame: self.frame.clone(),
             scroll: self.scroll.clone(),
-            resizing: self.over_edge || self.resize.is_some(),
+            resizing: self.over_edge || matches!(self.drag, Some(Drag::Resize { .. })),
             colors,
         };
         let header = px(self.frame.borrow().layout.as_ref().map_or(0.0, |layout| layout.header));

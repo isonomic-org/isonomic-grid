@@ -283,3 +283,60 @@ fn a_screen_of_new_text_is_shaped_over_several_frames(cx: &mut TestAppContext) {
     assert_eq!(shaped, cells - 12, "every cell but the headers, once each");
     assert_eq!(draw(cx), (0, 0), "and then nothing is left to do");
 }
+
+#[ui::test]
+fn a_drag_selects_a_range_and_scrolls_past_the_edge(cx: &mut TestAppContext) {
+    let (view, cx) = open(cx, 10_000);
+    let range = |view: &Entity<GridView>, cx: &mut VisualTestContext| {
+        let selection = view.read_with(cx, |view, cx| view.state().read(cx).selection().clone());
+        let last = selection.ranges.last().copied().unwrap();
+        (selection.active, last.rows(), last.columns())
+    };
+    let at = |view: &Entity<GridView>, cx: &mut VisualTestContext, row: usize, column: usize| {
+        let bounds = view.read_with(cx, |view, _| view.cell_bounds(row, column)).unwrap();
+        bounds.origin + point(px(4.), px(4.))
+    };
+    let left = MouseButton::Left;
+    let from = at(&view, cx, 1, 0);
+    cx.simulate_event(MouseDownEvent {
+        position: from,
+        button: left,
+        click_count: 1,
+        ..Default::default()
+    });
+    let to = at(&view, cx, 4, 2);
+    cx.simulate_event(MouseMoveEvent {
+        position: to,
+        pressed_button: Some(left),
+        ..Default::default()
+    });
+    settle(cx);
+    assert_eq!(range(&view, cx), (Cell { row: 1, column: 0 }, (1, 4), (0, 2)));
+
+    // Held below the window, the grid scrolls and the range grows with
+    // every frame, without the pointer moving again.
+    let window = cx.update(|window, _| window.viewport_size());
+    let below = point(to.x, window.height + px(40.));
+    cx.simulate_event(MouseMoveEvent {
+        position: below,
+        pressed_button: Some(left),
+        ..Default::default()
+    });
+    settle(cx);
+    let first = range(&view, cx).1.1;
+    let visible = view.read_with(cx, |view, _| view.visible_rows());
+    assert!(visible.start > 0 && first >= visible.end - 2, "scrolled, head on the last row shown");
+    settle(cx);
+    settle(cx);
+    let later = range(&view, cx).1.1;
+    assert!(later > first, "it keeps going: {first} then {later}");
+
+    // Letting go stops it.
+    cx.simulate_event(MouseUpEvent { position: below, button: left, ..Default::default() });
+    settle(cx);
+    let stopped = range(&view, cx);
+    settle(cx);
+    settle(cx);
+    assert_eq!(range(&view, cx), stopped);
+    assert_eq!(stopped.0, Cell { row: 1, column: 0 }, "the anchor never moved");
+}
