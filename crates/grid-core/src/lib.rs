@@ -10,6 +10,7 @@ mod column;
 mod query;
 mod source;
 mod table;
+mod text;
 mod value;
 
 pub use column::{Column, ColumnId, ColumnSpec, ColumnType};
@@ -21,4 +22,5 @@ pub use source::{
     SourceError,
 };
 pub use table::{Limits, RowId, Table};
+pub use text::TextColumn;
 pub use value::{Decimal, Value, compare, fold};

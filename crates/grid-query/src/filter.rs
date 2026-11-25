@@ -78,16 +78,27 @@ fn leaf(table: &Table, index: usize, test: Compare, value: &Value) -> Bitmap {
                     }
             })
         }
-        (Column::Text(data, valid), Value::Text(wanted)) if textual => {
+        (Column::Text(text), Value::Text(wanted)) if textual => {
+            // Match each distinct string once, then look rows up.
             let needle = fold(wanted);
             let prefix = test == Compare::StartsWith;
-            Bitmap::from_fn(len, |row| valid[row] && text_matches(&data[row], &needle, prefix))
+            let hits: Vec<bool> = text
+                .dictionary()
+                .iter()
+                .map(|entry| text_matches(entry, &needle, prefix))
+                .collect();
+            let (codes, valid) = (text.codes(), text.validity());
+            Bitmap::from_fn(len, |row| valid[row] && hits[codes[row] as usize])
         }
-        (Column::Text(data, valid), Value::Text(wanted))
-            if matches!(test, Compare::Eq | Compare::Ne) =>
-        {
+        (Column::Text(text), Value::Text(wanted)) if matches!(test, Compare::Eq | Compare::Ne) => {
             let equal = test == Compare::Eq;
-            Bitmap::from_fn(len, |row| valid[row] && (*data[row] == **wanted) == equal)
+            let (codes, valid) = (text.codes(), text.validity());
+            match text.code_of(wanted) {
+                Some(code) => {
+                    Bitmap::from_fn(len, |row| valid[row] && (codes[row] == code) == equal)
+                }
+                None => Bitmap::from_fn(len, |row| valid[row] && !equal),
+            }
         }
         _ => {
             let numeric = value.as_f64().is_some();
@@ -158,9 +169,15 @@ pub fn search(table: &Table, text: &str, columns: &[usize]) -> Bitmap {
     for index in columns {
         let Some((spec, column)) = table.column(*index) else { continue };
         let hit = match column {
-            Column::Text(data, valid) => Bitmap::from_fn(table.len(), |row| {
-                valid[row] && text_matches(&data[row], &needle, false)
-            }),
+            Column::Text(text) => {
+                let hits: Vec<bool> = text
+                    .dictionary()
+                    .iter()
+                    .map(|entry| text_matches(entry, &needle, false))
+                    .collect();
+                let (codes, valid) = (text.codes(), text.validity());
+                Bitmap::from_fn(table.len(), |row| valid[row] && hits[codes[row] as usize])
+            }
             _ if spec.ty == ColumnType::Choice => {
                 Bitmap::from_fn(table.len(), |row| match column.get(spec.ty, row) {
                     Value::Choice(choice) => spec

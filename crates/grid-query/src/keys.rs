@@ -1,9 +1,7 @@
 // Copyright 2026 Anud Inc.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-use std::collections::HashMap;
-
-use grid_core::{Column, Direction, Table, compare, fold};
+use grid_core::{Column, Direction, Table, compare};
 
 /// A sort key: the class (value, not-a-number, null) and then the
 /// value's rank. Comparing keys compares cells.
@@ -12,8 +10,10 @@ pub type Key = (u8, u64);
 const NULL: Key = (2, 0);
 const NAN: Key = (1, 0);
 
+/// An integer that orders as the number does. Negative zero equals
+/// zero, as it does when two numbers are compared.
 fn float_rank(value: f64) -> u64 {
-    let bits = value.to_bits();
+    let bits = if value == 0.0 { 0 } else { value.to_bits() };
     if bits >> 63 == 0 { bits | 1 << 63 } else { !bits }
 }
 
@@ -43,22 +43,19 @@ pub fn keys(table: &Table, index: usize, rows: &[u32], direction: Direction) -> 
                 (true, value) => turn(float_rank(value)),
             })
             .collect(),
-        Column::Text(data, valid) => {
-            // Every text column goes through a dictionary: each
-            // distinct string is folded and ranked once, and rows are
-            // then compared by rank alone.
-            let mut distinct: HashMap<&str, u64> = HashMap::new();
-            for row in rows.iter().filter(|row| valid[at(row)]) {
-                distinct.entry(&data[at(row)]).or_insert(0);
-            }
-            let mut ordered: Vec<(String, &str)> =
-                distinct.keys().map(|text| (fold(text), *text)).collect();
-            ordered.sort_unstable();
-            for (rank, (_, text)) in ordered.iter().enumerate() {
-                distinct.insert(text, rank as u64);
-            }
+        Column::Text(text) => {
+            // Text is compared by rank alone: the column's dictionary
+            // is folded and ordered once, and reused until it grows.
+            let ranks = text.ranks();
+            let (codes, valid) = (text.codes(), text.validity());
             rows.iter()
-                .map(|row| if valid[at(row)] { turn(distinct[&*data[at(row)]]) } else { NULL })
+                .map(|row| {
+                    if valid[at(row)] {
+                        turn(u64::from(ranks[codes[at(row)] as usize]))
+                    } else {
+                        NULL
+                    }
+                })
                 .collect()
         }
         Column::Other(_) => {

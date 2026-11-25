@@ -2,6 +2,22 @@
 
 Newest first.
 
+## 2026-11-25: text is dictionary-encoded; sorting is a stable radix sort
+
+- Text columns keep each distinct string once and a code per row. The dictionary's folded sort order is computed once and reused until a new string arrives. Filters and search test each distinct string once.
+- Sorting runs a stable byte-wise radix sort per key, from the least significant key to the most, and skips byte positions where every key agrees.
+- Negative zero now sorts equal to zero, as comparison already said. A new test checks the fast path against a plain comparison sort on 6,000 rows, including nulls, not-a-number, descending keys and a restored row.
+
+One million rows, same machine as below; each figure includes about 50 ms to emit one million result rows:
+
+| | Before | Now |
+|---|---|---|
+| Sort by an integer column | 136 ms | 118 ms |
+| Sort by two keys | 222 ms | 163 ms |
+| Sort by a mostly distinct text column | 1.24 s | 0.63 s first time, then cached |
+| Search across all columns | 75 ms | 32 ms |
+| Group by a text column with sum and average | 181 ms | 73 ms |
+
 ## 2026-11-25: licence
 
 The repository is licensed under GPL-3.0-or-later: LICENSE at the root, the licence field in every manifest, and the copyright and SPDX lines at the top of every Rust source file. SECURITY.md says how to report a vulnerability. No behaviour changed.
@@ -37,7 +53,7 @@ Every figure includes about 40 ms to emit one million result rows.
 **Not done, in the order it should be done.**
 
 1. **Nothing is drawn yet.** `grid-gpui`, `ui` and the playground do not exist. The component library was confirmed to compile on Linux at revision `834fc6a5`. This is milestone 1's first task.
-2. **Text columns are not dictionary-encoded in storage.** The sort builds a dictionary per query, so grouping by a low-cardinality text column costs 181 ms where the spike measured 2.5 ms on encoded data. Encoding text at rest, with a cached rank per column, is the largest single speed-up available and the spec already calls for it.
+2. ~~Text columns are not dictionary-encoded in storage.~~ Done; see the entry above.
 3. **Text order is folded, not collated.** Lower case with common Latin accents removed, then bytes. Locale-aware collation goes behind the same dictionary once the collation dependency is approved.
 4. **Sorting emits every row.** A windowed result (top of the order only) and running the pipeline off the main thread are milestone 2.
 5. **Nothing has run on macOS.** All numbers above are from Linux.
