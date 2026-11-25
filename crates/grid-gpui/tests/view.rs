@@ -186,3 +186,49 @@ fn cells_edit_copy_and_undo(cx: &mut TestAppContext) {
     keys(cx, "secondary-shift-z");
     assert_eq!(text(&view, cx, 1, 2), "41");
 }
+
+#[ui::test]
+fn typing_edits_the_active_cell(cx: &mut TestAppContext) {
+    let (view, cx) = open(cx, 10);
+    let editing = |view: &Entity<GridView>, cx: &mut VisualTestContext| {
+        view.read_with(cx, |view, cx| view.state().read(cx).editing().cloned())
+    };
+    click(&view, cx, 1, 2, Modifiers::none());
+    cx.simulate_input("41");
+    settle(cx);
+    assert_eq!(
+        editing(&view, cx).unwrap().text,
+        "41",
+        "typing starts an edit that replaces the cell"
+    );
+    assert_eq!(text(&view, cx, 1, 2), "9", "nothing is written until the edit is confirmed");
+    keys(cx, "enter");
+    assert_eq!(text(&view, cx, 1, 2), "41");
+    assert_eq!(active(&view, cx), Cell { row: 2, column: 2 }, "Enter confirms and moves down");
+
+    // Text that is not a number is refused; the editor stays open.
+    cx.simulate_input("abc");
+    settle(cx);
+    keys(cx, "enter");
+    let refused = editing(&view, cx).unwrap();
+    assert!(refused.error.is_some() && refused.text == "abc");
+    assert_eq!(active(&view, cx), Cell { row: 2, column: 2 });
+    keys(cx, "backspace backspace backspace");
+    cx.simulate_input("7");
+    settle(cx);
+    keys(cx, "up");
+    assert_eq!(text(&view, cx, 2, 2), "7", "moving away commits");
+    assert_eq!(active(&view, cx), Cell { row: 1, column: 2 });
+
+    // F2 amends, Escape cancels, Delete clears, and undo steps back.
+    keys(cx, "f2");
+    cx.simulate_input("0");
+    settle(cx);
+    assert_eq!(editing(&view, cx).unwrap().text, "410");
+    keys(cx, "escape");
+    assert_eq!((editing(&view, cx), text(&view, cx, 1, 2)), (None, "41".to_owned()));
+    keys(cx, "delete");
+    assert_eq!(text(&view, cx, 1, 2), "");
+    keys(cx, "secondary-z secondary-z");
+    assert_eq!((text(&view, cx, 1, 2), text(&view, cx, 2, 2)), ("41".to_owned(), "8".to_owned()));
+}

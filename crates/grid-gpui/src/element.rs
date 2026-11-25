@@ -19,6 +19,8 @@ use crate::state::GridState;
 
 /// The line between rows.
 const HAIRLINE: Pixels = px(1.);
+/// The caret, and the rule under a cell being edited.
+const CARET: Pixels = px(2.);
 /// Cell padding, as a share of the root font size.
 const PADDING_REMS: f32 = 0.375;
 
@@ -43,6 +45,8 @@ pub struct Colors {
     pub muted: Hsla,
     pub border: Hsla,
     pub selection: Hsla,
+    pub caret: Hsla,
+    pub error: Hsla,
 }
 
 pub struct Painted {
@@ -51,9 +55,14 @@ pub struct Painted {
     right: bool,
     header: bool,
     selected: bool,
+    /// Being edited: paint a caret after the text, and whether the
+    /// last commit was refused.
+    editing: Option<bool>,
 }
 
 pub struct GridElement {
+    pub view: Entity<crate::view::GridView>,
+    pub focus: ui::FocusHandle,
     pub state: Entity<GridState>,
     pub frame: SharedFrame,
     pub colors: Colors,
@@ -159,10 +168,19 @@ impl Element for GridElement {
                         }
                         let width = if group { right_edge - x } else { *width };
                         let cell = Cell { row: *row, column: *column };
+                        let editing =
+                            state.editing().filter(|editing| editing.cell == cell).cloned();
+                        let text = match &editing {
+                            Some(editing) => editing.text.clone(),
+                            None => state.cell_text(*row, *column),
+                        };
                         cells.push(Painted {
+                            editing: editing.map(|editing| editing.error.is_some()),
                             bounds: at(*x, *y, width, *height),
-                            text: state.cell_text(*row, *column).replace(['\n', '\r'], " ").into(),
-                            right: state.is_numeric(*column) && !group,
+                            text: text.replace(['\n', '\r'], " ").into(),
+                            right: state.is_numeric(*column)
+                                && !group
+                                && state.editing().is_none_or(|e| e.cell != cell),
                             header: *row_pinned || *column_pinned,
                             selected: !group && state.selection().contains(cell),
                         });
@@ -176,6 +194,7 @@ impl Element for GridElement {
                     right: state.is_numeric(*column),
                     header: true,
                     selected: false,
+                    editing: None,
                 });
             }
             (cells, layout, viewport, page)
@@ -218,26 +237,40 @@ impl Element for GridElement {
                     size(cell.bounds.size.width, HAIRLINE),
                 );
                 window.paint_quad(fill(rule, colors.border));
-                if cell.text.is_empty() {
-                    continue;
-                }
-                let run = TextRun {
-                    len: cell.text.len(),
-                    font: style.font(),
-                    color: if cell.header { colors.muted } else { colors.foreground },
-                    background_color: None,
-                    underline: None,
-                    strikethrough: None,
-                };
-                let line =
-                    window.text_system().shape_line(cell.text.clone(), font_size, &[run], None);
-                let inner = cell.bounds.size.width - padding * 2.0;
                 let origin = cell.bounds.origin + point(padding, padding);
-                let align = if cell.right { TextAlign::Right } else { TextAlign::Left };
-                window.with_content_mask(Some(ContentMask { bounds: cell.bounds }), |window| {
-                    let _ = line.paint(origin, line_height, align, Some(inner), window, cx);
-                });
+                let mut caret_x = origin.x;
+                if !cell.text.is_empty() {
+                    let color = if cell.header { colors.muted } else { colors.foreground };
+                    let run = TextRun {
+                        len: cell.text.len(),
+                        font: style.font(),
+                        color,
+                        background_color: None,
+                        underline: None,
+                        strikethrough: None,
+                    };
+                    let line =
+                        window.text_system().shape_line(cell.text.clone(), font_size, &[run], None);
+                    caret_x += line.width;
+                    let inner = cell.bounds.size.width - padding * 2.0;
+                    let align = if cell.right { TextAlign::Right } else { TextAlign::Left };
+                    window.with_content_mask(Some(ContentMask { bounds: cell.bounds }), |window| {
+                        let _ = line.paint(origin, line_height, align, Some(inner), window, cx);
+                    });
+                }
+                if let Some(refused) = cell.editing {
+                    let caret = Bounds::new(point(caret_x, origin.y), size(CARET, line_height));
+                    window.paint_quad(fill(caret, colors.caret));
+                    let mark = Bounds::new(
+                        cell.bounds.origin + point(px(0.), cell.bounds.size.height - CARET),
+                        size(cell.bounds.size.width, CARET),
+                    );
+                    window
+                        .paint_quad(fill(mark, if refused { colors.error } else { colors.caret }));
+                }
             }
+            let handler = ui::ElementInputHandler::new(bounds, self.view.clone());
+            window.handle_input(&self.focus, handler, cx);
         });
     }
 }

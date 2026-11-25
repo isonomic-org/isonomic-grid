@@ -7,9 +7,10 @@ use grid_interact::{Cell, Move};
 use grid_layout::Hit;
 use ui::component::ActiveTheme as _;
 use ui::{
-    App, Bounds, ClipboardItem, Context, Entity, FocusHandle, Focusable, InteractiveElement as _,
-    IntoElement, MouseButton, MouseDownEvent, ParentElement as _, Pixels, Point, Render,
-    ScrollEvent, Styled as _, Subscription, Window, div, point, px, size,
+    App, Bounds, ClipboardItem, Context, Entity, EntityInputHandler, FocusHandle, Focusable,
+    InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent, ParentElement as _, Pixels,
+    Point, Render, ScrollEvent, Styled as _, Subscription, UTF16Selection, Window, div, point, px,
+    size,
 };
 
 use crate::actions::*;
@@ -91,6 +92,9 @@ impl GridView {
 
     fn mouse_down(&mut self, event: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         window.focus(&self.focus, cx);
+        if !self.state.update(cx, |state, cx| state.commit_edit(cx)) {
+            return;
+        }
         let (extend, add) = (event.modifiers.shift, event.modifiers.secondary(cx));
         match self.hit(event.position) {
             Hit::Header { column } => self.state.update(cx, |state, cx| state.sort_by(column, cx)),
@@ -123,6 +127,10 @@ impl GridView {
 
     /// Moves the selection and scrolls it into view.
     fn go(&mut self, step: Move, extend: bool, cx: &mut Context<Self>) {
+        // Moving away from a cell being edited commits it first.
+        if !self.state.update(cx, |state, cx| state.commit_edit(cx)) {
+            return;
+        }
         let page = self.frame.borrow().page.max(1);
         let to = self.state.update(cx, |state, cx| state.navigate(step, extend, page, cx));
         let reveal = {
@@ -153,8 +161,16 @@ impl Render for GridView {
             muted: theme.muted_foreground,
             border: theme.border,
             selection: theme.selection,
+            caret: theme.caret,
+            error: theme.danger,
         };
-        let element = GridElement { state: self.state.clone(), frame: self.frame.clone(), colors };
+        let element = GridElement {
+            view: cx.entity(),
+            focus: self.focus.clone(),
+            state: self.state.clone(),
+            frame: self.frame.clone(),
+            colors,
+        };
         div()
             .id("isonomic-grid")
             .key_context(CONTEXT)
@@ -201,8 +217,104 @@ impl Render for GridView {
             .on_action(cx.listener(|this, _: &Redo, _, cx| {
                 this.state.update(cx, |state, cx| state.redo(cx))
             }))
+            .on_action(cx.listener(|this, _: &Confirm, _, cx| {
+                if this.state.read(cx).editing().is_some() {
+                    this.go(Move::Down, false, cx);
+                } else {
+                    this.state.update(cx, |state, cx| state.begin_edit(None, cx));
+                }
+            }))
+            .on_action(cx.listener(|this, _: &EditCell, _, cx| {
+                this.state.update(cx, |state, cx| state.begin_edit(None, cx));
+            }))
+            .on_action(cx.listener(|this, _: &Cancel, _, cx| {
+                this.state.update(cx, |state, cx| state.cancel_edit(cx));
+            }))
+            .on_action(cx.listener(|this, _: &Backspace, _, cx| {
+                this.state.update(cx, |state, cx| match state.editing() {
+                    Some(_) => state.edit_backspace(cx),
+                    None => state.begin_edit(Some(""), cx),
+                });
+            }))
+            .on_action(cx.listener(|this, _: &ClearCell, _, cx| {
+                this.state.update(cx, |state, cx| state.clear_cell(cx));
+            }))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::mouse_down))
             .on_scroll(cx.listener(Self::scroll))
             .child(element)
+    }
+}
+
+/// Typing starts an edit of the active cell, or adds to the one in
+/// progress. Composition is not supported yet: composed text arrives
+/// as it is committed.
+impl EntityInputHandler for GridView {
+    fn text_for_range(
+        &mut self,
+        _: Range<usize>,
+        _: &mut Option<Range<usize>>,
+        _: &mut Window,
+        _: &mut Context<Self>,
+    ) -> Option<String> {
+        None
+    }
+
+    fn selected_text_range(
+        &mut self,
+        _: bool,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<UTF16Selection> {
+        let at = self.state.read(cx).editing().map_or(0, |e| e.text.encode_utf16().count());
+        Some(UTF16Selection { range: at..at, reversed: false })
+    }
+
+    fn marked_text_range(&self, _: &mut Window, _: &mut Context<Self>) -> Option<Range<usize>> {
+        None
+    }
+
+    fn unmark_text(&mut self, _: &mut Window, _: &mut Context<Self>) {}
+
+    fn replace_text_in_range(
+        &mut self,
+        _: Option<Range<usize>>,
+        text: &str,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.state.update(cx, |state, cx| match state.editing() {
+            Some(_) => state.edit_insert(text, cx),
+            None => state.begin_edit(Some(text), cx),
+        });
+    }
+
+    fn replace_and_mark_text_in_range(
+        &mut self,
+        _: Option<Range<usize>>,
+        _: &str,
+        _: Option<Range<usize>>,
+        _: &mut Window,
+        _: &mut Context<Self>,
+    ) {
+    }
+
+    fn bounds_for_range(
+        &mut self,
+        _: Range<usize>,
+        _: Bounds<Pixels>,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<Bounds<Pixels>> {
+        let active = self.state.read(cx).selection().active;
+        self.cell_bounds(active.row, active.column)
+    }
+
+    fn character_index_for_point(
+        &mut self,
+        _: Point<Pixels>,
+        _: &mut Window,
+        _: &mut Context<Self>,
+    ) -> Option<usize> {
+        None
     }
 }

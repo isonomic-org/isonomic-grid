@@ -19,7 +19,7 @@ mod state;
 mod view;
 
 pub use actions::*;
-pub use state::{GridEvent, GridState};
+pub use state::{Editing, GridEvent, GridState};
 pub use view::GridView;
 
 /// Registers the grid's key bindings. Call once at start-up.
