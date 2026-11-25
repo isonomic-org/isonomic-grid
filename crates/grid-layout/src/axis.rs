@@ -1,3 +1,6 @@
+// Copyright 2026 Anud Inc.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 use std::ops::Range;
 
 /// Prefix sums that can be updated in logarithmic time.

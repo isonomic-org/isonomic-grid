@@ -1,3 +1,6 @@
+// Copyright 2026 Anud Inc.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 //! Values, typed columns, the columnar table, the view query and the
 //! data source contract.
 //!

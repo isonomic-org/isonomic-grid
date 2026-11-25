@@ -1,3 +1,6 @@
+// Copyright 2026 Anud Inc.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 //! Geometry for a grid: axes of row heights and column widths, pinned
 //! regions, scrolling in 64-bit coordinates and hit testing.
 //!

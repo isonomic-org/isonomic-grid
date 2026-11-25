@@ -1,3 +1,6 @@
+// Copyright 2026 Anud Inc.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 use grid_core::{AggregateFn, Column, Table, Value, compare};
 
 /// One aggregate over the given rows of one column. Nulls are

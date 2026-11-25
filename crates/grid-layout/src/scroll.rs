@@ -1,3 +1,6 @@
+// Copyright 2026 Anud Inc.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 use crate::Axis;
 
 /// A scroll position held as an item and a distance into it, so the

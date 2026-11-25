@@ -4,6 +4,7 @@ description = "Axes, pinned regions, scrolling and hit testing."
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [dependencies]
 

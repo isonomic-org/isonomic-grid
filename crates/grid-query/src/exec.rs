@@ -1,3 +1,6 @@
+// Copyright 2026 Anud Inc.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 use grid_core::{Direction, RowId, SourceError, Table, Value, ViewQuery};
 
 use crate::keys::{Key, keys};
