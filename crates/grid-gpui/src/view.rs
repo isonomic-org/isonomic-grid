@@ -174,9 +174,12 @@ impl Focusable for GridView {
 }
 
 impl Render for GridView {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if std::mem::take(&mut self.autoscroll) {
             self.drag_select(cx);
+            if self.autoscroll {
+                window.request_animation_frame();
+            }
         }
         let theme = cx.theme();
         let colors = Colors {
