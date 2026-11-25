@@ -8,7 +8,9 @@ A grid shows a **view query** (columns, filter, search, sort, grouping, aggregat
 
 ![The same rows grouped by city](docs/images/grid-grouped.png)
 
-The frames above are the real renderer, run offscreen: `cargo run -p grid-gpui --example screenshot -- grid.png`.
+![The first column and the first and last rows pinned while the rest scrolls](docs/images/grid-pinned.png)
+
+The frames above are the real renderer, run offscreen: `cargo run -p grid-gpui --example screenshot -- grid.png`, with `grouped` or `pinned` after the file name for the other two.
 
 ## Layout
 
@@ -20,7 +22,7 @@ The frames above are the real renderer, run offscreen: `cargo run -p grid-gpui -
 | `grid-interact` | Active cell and ranges, keyboard navigation, row selection, the edit log, the line being edited in a cell. |
 | `grid-formats` | Delimited text in and out, typed parsing and formatting, import with type inference, paste. |
 | `ui` | The component library, re-exported at one pinned revision. |
-| `grid-gpui` | The view: state, one element painting the visible cells, pointer, keyboard, in-cell editing, scrolling and scrollbars. |
+| `grid-gpui` | The view: state, one element painting the visible cells, pointer, keyboard, in-cell editing, the clipboard, scrolling and scrollbars, columns that move, hide, pin and fit. |
 | `xtask` | Repository checks. |
 
 The view crates need the component library's system dependencies to build; the headless crates do not. See `docs/status.md` for where things stand.

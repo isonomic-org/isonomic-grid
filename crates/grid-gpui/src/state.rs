@@ -16,7 +16,7 @@ use crate::edit::Editing;
 use crate::held::Held;
 
 /// A column's starting width, in rems.
-const COLUMN_REMS: f32 = 10.0;
+pub(crate) const COLUMN_REMS: f32 = 10.0;
 /// The narrowest a column can be dragged, in rems.
 const MIN_COLUMN_REMS: f32 = 2.0;
 const UNDO_STEPS: usize = 200;
@@ -27,6 +27,8 @@ pub enum GridEvent {
     /// The rows shown changed: an edit, or a new query.
     Changed,
     SelectionChanged,
+    /// Columns were moved, hidden or shown.
+    ColumnsChanged,
     /// A paste or an edit was refused, and why. Nothing was changed.
     Refused(String),
 }
@@ -38,7 +40,7 @@ pub struct GridState {
     /// Visible columns, as indices into the source's schema.
     pub(crate) columns: Vec<usize>,
     /// Width of each visible column, in rems.
-    widths: Vec<f32>,
+    pub(crate) widths: Vec<f32>,
     pub(crate) selection: Selection,
     /// What the selection is on, by ID.
     pub(crate) held: Held,
@@ -161,6 +163,9 @@ impl GridState {
     }
 
     pub(crate) fn changed(&mut self, cx: &mut Context<Self>) {
+        let rows = self.row_count();
+        self.row_pins.leading = self.row_pins.leading.min(rows);
+        self.row_pins.trailing = self.row_pins.trailing.min(rows - self.row_pins.leading);
         self.restore_selection();
         // An edit in progress is on the active cell, wherever its row went.
         if let Some(editing) = &mut self.editing {

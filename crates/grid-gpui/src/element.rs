@@ -27,7 +27,7 @@ const CARET: Pixels = px(2.);
 /// The rest are left for the frames that follow.
 const NEW_LINES_PER_FRAME: usize = 256;
 /// Cell padding, as a share of the root font size.
-const PADDING_REMS: f32 = 0.375;
+pub(crate) const PADDING_REMS: f32 = 0.375;
 
 /// What the last frame laid out, kept for hit testing and paging.
 #[derive(Default)]
@@ -62,7 +62,14 @@ pub struct Painted {
     bounds: Bounds<Pixels>,
     text: SharedString,
     right: bool,
+    /// A column title: drawn in the muted color.
     header: bool,
+    /// In a pinned row or column, or the header: drawn over whatever
+    /// scrolls beneath it, on its own background.
+    opaque: bool,
+    /// What the cell's outline may be drawn within, so that an active
+    /// cell scrolled partly under a pinned band is cut off by it.
+    within: Bounds<Pixels>,
     selected: bool,
     /// The cell the keyboard acts on.
     active: bool,
@@ -184,6 +191,22 @@ impl Element for GridElement {
             // Scrolling cells first, pinned ones after, so pinned
             // cells paint over what scrolls beneath them.
             let right_edge = columns.iter().map(|(_, x, width, _)| x + width).fold(0.0, f32::max);
+            // The part of the view that scrolls, between the pinned bands.
+            let ends = |bands: &[Band; 3], axis: &Axis, start: f32, extent: f32| {
+                let lead =
+                    slots(&bands[0], axis).last().map_or(start, |(_, at, size, _)| at + size);
+                let tail = if bands[2].indices.is_empty() { extent } else { bands[2].start };
+                (lead, tail.max(lead))
+            };
+            let (left, right) = ends(&column_bands, &layout.columns, 0.0, viewport.width);
+            let (top, bottom) = ends(&row_bands, &layout.rows, row_height, viewport.height);
+            let clip = |column_pinned: bool, row_pinned: bool| {
+                let (x, width) =
+                    if column_pinned { (0.0, viewport.width) } else { (left, right - left) };
+                let (y, height) =
+                    if row_pinned { (0.0, viewport.height) } else { (top, bottom - top) };
+                at(x, y, width, height)
+            };
             for layer in 0..=2 {
                 for (row, y, height, row_pinned) in &rows {
                     let group = state.is_group(*row);
@@ -215,7 +238,9 @@ impl Element for GridElement {
                             right: state.is_numeric(*column)
                                 && !group
                                 && state.editing().is_none_or(|e| e.cell != cell),
-                            header: *row_pinned || *column_pinned,
+                            header: false,
+                            opaque: *row_pinned || *column_pinned,
+                            within: clip(*column_pinned, *row_pinned),
                             selected: !group && state.selection().contains(cell),
                             active: !group && state.selection().active == cell,
                         });
@@ -224,29 +249,43 @@ impl Element for GridElement {
             }
             // One line under each row, kept out from under pinned rows.
             let hairline = f32::from(HAIRLINE);
-            let lead_end = slots(&row_bands[0], &layout.rows)
-                .last()
-                .map_or(row_height, |(_, y, height, _)| y + height);
-            let tail_start =
-                if row_bands[2].indices.is_empty() { viewport.height } else { row_bands[2].start };
+            let (lead_end, tail_start) = (top, bottom);
             let across = right_edge.min(viewport.width);
             rules.push(at(0.0, row_height - hairline, across, hairline));
+            // A line along each pinned band's inner edge, where the rest
+            // scrolls under it.
+            let down = viewport.height.min(row_height + layout.rows.total() as f32);
+            if !column_bands[0].indices.is_empty() {
+                rules.push(at(left - hairline, 0.0, hairline, down));
+            }
+            if !column_bands[2].indices.is_empty() {
+                rules.push(at(right, 0.0, hairline, down));
+            }
+            if !row_bands[2].indices.is_empty() {
+                rules.push(at(0.0, bottom - hairline, across, hairline));
+            }
             for (_, y, height, pinned) in &rows {
                 let line = y + height - hairline;
                 if *pinned || (line >= lead_end && line < tail_start) {
                     rules.push(at(0.0, line, across, hairline));
                 }
             }
-            for (column, x, width, _) in &columns {
-                cells.push(Painted {
-                    bounds: at(*x, 0.0, *width, row_height),
-                    text: state.header_text(*column).into(),
-                    right: state.is_numeric(*column),
-                    header: true,
-                    selected: false,
-                    active: false,
-                    editing: None,
-                });
+            // Titles: those of scrolling columns first, then pinned ones
+            // over them.
+            for pinned in [false, true] {
+                for (column, x, width, _) in columns.iter().filter(|slot| slot.3 == pinned) {
+                    cells.push(Painted {
+                        bounds: at(*x, 0.0, *width, row_height),
+                        text: state.header_text(*column).into(),
+                        right: state.is_numeric(*column),
+                        header: true,
+                        opaque: true,
+                        within: clip(pinned, true),
+                        selected: false,
+                        active: false,
+                        editing: None,
+                    });
+                }
             }
             (cells, layout, viewport, page)
         });
@@ -294,7 +333,7 @@ impl Element for GridElement {
         let view = self.view.clone();
         window.on_mouse_event(move |_: &MouseUpEvent, phase, _, cx| {
             if phase == DispatchPhase::Bubble {
-                view.update(cx, |view, _| view.mouse_up());
+                view.update(cx, |view, cx| view.mouse_up(cx));
             }
         });
         let mut frame = self.frame.borrow_mut();
@@ -309,7 +348,7 @@ impl Element for GridElement {
         window.with_content_mask(Some(ContentMask { bounds }), |window| {
             window.paint_quad(fill(bounds, colors.background));
             for cell in cells.iter() {
-                if cell.header {
+                if cell.opaque {
                     window.paint_quad(fill(cell.bounds, colors.background));
                 }
                 if cell.selected {
@@ -388,14 +427,9 @@ impl Element for GridElement {
             for cell in cells.iter().filter(|cell| cell.active && cell.editing.is_none()) {
                 let color = if focused { colors.caret } else { colors.muted };
                 let clear = ui::transparent_black();
-                window.paint_quad(quad(
-                    cell.bounds,
-                    px(0.),
-                    clear,
-                    CARET,
-                    color,
-                    Default::default(),
-                ));
+                let outline = quad(cell.bounds, px(0.), clear, CARET, color, Default::default());
+                let mask = Some(ContentMask { bounds: cell.within.intersect(&bounds) });
+                window.with_content_mask(mask, |window| window.paint_quad(outline));
             }
             let handler = ui::ElementInputHandler::new(bounds, self.view.clone());
             window.handle_input(&self.focus, handler, cx);

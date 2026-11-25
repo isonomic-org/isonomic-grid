@@ -57,6 +57,11 @@ impl LineCache {
         }
     }
 
+    /// The font, size and colors the last frame drew with.
+    pub fn face(&self) -> Option<&Face> {
+        self.face.as_ref()
+    }
+
     /// Starts a frame, which may shape at most `budget` new lines.
     pub fn begin_frame(&mut self, budget: usize) {
         self.budget = budget;
