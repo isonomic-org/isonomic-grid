@@ -2,6 +2,10 @@
 
 Newest first.
 
+## 2026-11-25: dragging selects a range
+
+- Pressing on a cell and dragging extends the selection to the cell under the pointer. With the pointer held past an edge the grid scrolls that way, faster the further out it is, and the range grows with every frame until the button is released.
+
 ## 2026-11-25: a frame shapes only so much new text
 
 - One frame shapes at most 256 lines of text it has never seen. A jump to rows never shown draws what it can, leaves the other cells empty, and fills them in over the next frames. On the same machine and run as the table below, a whole new screen every frame went from 19.7 ms to 5.4 ms a frame; steady scrolling is unchanged.

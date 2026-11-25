@@ -234,6 +234,16 @@ impl GridState {
         cx.notify();
     }
 
+    /// Extends the last selected range to a cell, as a drag does.
+    pub fn drag_to(&mut self, cell: Cell, cx: &mut Context<Self>) {
+        let before = self.selection.ranges.last().copied();
+        self.selection.drag_to(cell);
+        if self.selection.ranges.last().copied() != before {
+            cx.emit(GridEvent::SelectionChanged);
+            cx.notify();
+        }
+    }
+
     pub fn select_all(&mut self, cx: &mut Context<Self>) {
         let (rows, columns) = (self.row_count(), self.column_count());
         self.selection.select_all(rows, columns);
