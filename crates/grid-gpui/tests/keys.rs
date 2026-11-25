@@ -54,3 +54,59 @@ fn keys_jump_to_the_ends_and_select_rows_and_columns(cx: &mut TestAppContext) {
     keys(cx, "enter");
     assert_eq!(text(&view, cx, 2, 1), "infra ");
 }
+
+#[ui::test]
+fn a_grid_with_nothing_in_it_takes_every_key_and_click(cx: &mut TestAppContext) {
+    use grid_core::{ColumnSpec, ColumnType, Table};
+    use grid_gpui::GridState;
+    use ui::{AppContext as _, ClipboardItem, Focusable as _, point, px};
+
+    cx.update(|cx| {
+        ui::init(cx);
+        grid_gpui::init(cx);
+    });
+    for columns in [0, 2] {
+        let (view, cx) = cx.add_window_view(move |window, cx| {
+            let specs = (0..columns)
+                .map(|column| ColumnSpec::new(&format!("c{column}"), "C", ColumnType::Int))
+                .collect();
+            let state = cx.new(|cx| GridState::new(Table::new(specs), cx));
+            let view = GridView::new(state, cx);
+            window.focus(&view.focus_handle(cx), cx);
+            view
+        });
+        common::settle(cx);
+        keys(
+            cx,
+            "down up left right pagedown pageup home end tab shift-tab enter escape f2 delete \
+             backspace escape shift-space ctrl-space secondary-a secondary-c secondary-x \
+             secondary-down secondary-shift-up secondary-z secondary-shift-z",
+        );
+        cx.simulate_input("7");
+        keys(cx, "enter escape");
+        for at in [point(px(5.), px(5.)), point(px(300.), px(300.)), point(px(-5.), px(9_000.))] {
+            cx.simulate_click(at, Modifiers::none());
+        }
+        view.update(cx, |view, cx| {
+            view.state().update(cx, |state, cx| {
+                state.move_column(0, 1, cx);
+                state.hide_column(0, cx);
+                state.pin_columns(3, 3, cx);
+                state.pin_rows(3, 3, cx);
+                state.set_width(0, f32::NAN, cx);
+                state.set_width(9, 1.0, cx);
+                state.sort_by(0, cx);
+                state.toggle_group(0, cx);
+                state.scroll_to(f64::MAX, f64::MAX, cx);
+            })
+        });
+        common::settle(cx);
+
+        // Pasting into a table with columns and no rows makes rows.
+        cx.update(|_, cx| cx.write_to_clipboard(ClipboardItem::new_string("1\t2\n3\t4\n".into())));
+        keys(cx, "secondary-v");
+        let rows =
+            view.update(cx, |view, cx| view.state().update(cx, |state, _| state.row_count()));
+        assert_eq!(rows, if columns == 0 { 0 } else { 2 }, "with {columns} columns");
+    }
+}

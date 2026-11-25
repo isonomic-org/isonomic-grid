@@ -187,6 +187,10 @@ impl GridState {
             return self.refuse(format!("{} cells is too many to paste", range.cell_count()), cx);
         }
         let (mut rows, columns) = self.targets(range);
+        if columns.is_empty() {
+            // Nowhere to put a field: rows of nothing help nobody.
+            return;
+        }
         if fill {
             fields = vec![vec![fields[0][0].clone(); columns.len()]; rows.len()];
         } else {
