@@ -13,7 +13,7 @@ Tested in a headless window with real layout and real events: a 100,000-row grid
 
 **Not yet, and known rough edges.**
 
-1. It has been rendered offscreen with the real renderer on Linux (software Vulkan); the frames are in `docs/images/`, made by the `screenshot` example. It has not been run interactively, and not on macOS. A playground is next.
+1. It has been rendered offscreen with the real renderer on Linux (software Vulkan); the frames are in `docs/images/`, made by the `screenshot` example. The `playground` example opens it in a window; it was run on Linux under a virtual display with software rendering and driven with real pointer and key events (click, type, shortcuts, wheel). It has not been run on macOS, and nobody has used it by hand yet.
 2. No cell editor yet: `GridState::set_cell_text` is the entry point an editor will call.
 3. Each visible cell's text is shaped every frame; a per-frame shaping cache is the first paint optimisation.
 4. No scrollbars, column resize or reorder, or pin controls. The layout crate already supports pins and the scaled scrollbar range.

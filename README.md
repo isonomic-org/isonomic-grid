@@ -44,6 +44,14 @@ let page = source.fetch(&FetchRequest {   // or one window of one group
 })?;
 ```
 
+## Try it
+
+```sh
+cargo run -p grid-gpui --example playground
+```
+
+Opens the grid in a window. It needs the component library's system dependencies; on Linux those are the usual windowing, font and Vulkan development packages.
+
 ## Develop
 
 ```sh
