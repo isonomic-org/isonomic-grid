@@ -39,6 +39,8 @@ pub struct FetchRequest {
 pub struct Page { pub rows: Rows, pub count: RowCount }   // Exact(n) | AtLeast(n) | Unknown
 ```
 
+Version 0.1 implements this contract synchronously, for the in-memory source only: the same methods, returning their results directly. The asynchronous form above arrives with windowed sources.
+
 | Mode | Who runs the query | Use |
 |---|---|---|
 | **Memory** | The engine, on background threads, over the columnar store. | Up to tens of millions of cells loaded locally; artifacts; pasted and imported data. |
