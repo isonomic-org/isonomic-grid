@@ -60,6 +60,17 @@ impl GridView {
         self.frame.borrow_mut().lines.take_counts()
     }
 
+    /// The most cell texts any one frame shaped since the last call.
+    pub fn take_line_peak(&self) -> usize {
+        self.frame.borrow_mut().lines.take_peak()
+    }
+
+    /// How many cells the last frame left empty for a later frame to
+    /// shape and draw.
+    pub fn deferred_lines(&self) -> usize {
+        self.frame.borrow().lines.deferred()
+    }
+
     /// The rows in the scrolling band of the last frame.
     pub fn visible_rows(&self) -> Range<usize> {
         let frame = self.frame.borrow();

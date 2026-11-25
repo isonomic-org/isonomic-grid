@@ -6,6 +6,10 @@
 //! Shaping a line is the expensive part of drawing a cell. The toolkit
 //! keeps the lines of the previous frame; this keeps a few thousand
 //! more, so scrolling back over rows seen a moment ago shapes nothing.
+//!
+//! A frame shapes only so many new lines. A jump to rows never seen
+//! draws what it can, leaves the rest of the cells empty, and fills
+//! them in over the next few frames, so no single frame stalls.
 
 use std::collections::HashMap;
 
@@ -34,6 +38,13 @@ pub struct LineCache {
     /// call to [`LineCache::take_counts`].
     hits: usize,
     misses: usize,
+    /// New lines this frame may still shape, and how many it had to
+    /// leave for the next frame.
+    budget: usize,
+    allowed: usize,
+    deferred: usize,
+    /// The most lines one frame has shaped.
+    peak: usize,
 }
 
 impl LineCache {
@@ -46,14 +57,37 @@ impl LineCache {
         }
     }
 
+    /// Starts a frame, which may shape at most `budget` new lines.
+    pub fn begin_frame(&mut self, budget: usize) {
+        self.budget = budget;
+        self.allowed = budget;
+        self.deferred = 0;
+    }
+
+    /// Ends a frame, noting how many lines it shaped.
+    pub fn end_frame(&mut self) {
+        self.peak = self.peak.max(self.allowed - self.budget);
+    }
+
+    /// The most lines any one frame shaped since the last call.
+    pub fn take_peak(&mut self) -> usize {
+        std::mem::take(&mut self.peak)
+    }
+
+    /// How many lines this frame left for the next one to shape.
+    pub fn deferred(&self) -> usize {
+        self.deferred
+    }
+
     /// The shaped line for a cell's text, shaping it only if neither
-    /// generation holds it.
+    /// generation holds it. `None` when it would have to be shaped and
+    /// this frame has already shaped all it may.
     pub fn line(
         &mut self,
         text: &SharedString,
         header: bool,
         shape: impl FnOnce() -> ShapedLine,
-    ) -> &ShapedLine {
+    ) -> Option<&ShapedLine> {
         let key = (text.clone(), header);
         if !self.newer.contains_key(&key) {
             let line = match self.older.remove(&key) {
@@ -61,7 +95,12 @@ impl LineCache {
                     self.hits += 1;
                     line
                 }
+                None if self.budget == 0 => {
+                    self.deferred += 1;
+                    return None;
+                }
                 None => {
+                    self.budget -= 1;
                     self.misses += 1;
                     shape()
                 }
@@ -73,7 +112,7 @@ impl LineCache {
         } else {
             self.hits += 1;
         }
-        &self.newer[&key]
+        self.newer.get(&key)
     }
 
     /// Hits and misses since the last call.

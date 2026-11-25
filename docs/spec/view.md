@@ -12,7 +12,7 @@
 ## B8. Rendering
 
 - **One element.** `Grid` paints each region: backgrounds, grid lines, then cell contents clipped to their bounds, then selection and focus overlays.
-- **Text cache.** A shaped line is cached by its text in a bounded cache of two generations, emptied when the font, size or colors change; a line used again moves to the newer generation and the older one is dropped when the newer fills. Scrolling reuses shaped lines, and truncation is decided at paint from the cell width.
+- **Text cache.** A shaped line is cached by its text in a bounded cache of two generations, emptied when the font, size or colors change; a line used again moves to the newer generation and the older one is dropped when the newer fills. Scrolling reuses shaped lines, and truncation is decided at paint from the cell width. A frame shapes a bounded number of new lines and leaves the rest of the cells empty for the frames that follow.
 - **Scrolling.** The element handles wheel and trackpad input itself and keeps (anchor row, offset) in 64-bit for rows and a pixel offset for columns. It implements the UI library's scrollbar interface (viewport bounds, offset, content size) over a range scaled to fit 32-bit pixels, so the standard scrollbars, their dragging and their auto-hide work unchanged.
 - **Painters.** Each column type paints its cells. Built-in painters cover text with truncation, numbers with alignment, checkboxes, choice pills, links, dates, progress bars and sparklines.
 
@@ -75,7 +75,7 @@ Budgets are for the Intel test Mac, release build, one million rows unless state
 
 | Measure | Budget | Measured in isolation |
 |---|---|---|
-| Frame time while scrolling, about 2,500 visible cells | under 6 ms; 60 fps held | 5.5 ms at 1,950 cells for the grid's share, before the renderer (`frames` example) |
+| Frame time while scrolling, about 2,500 visible cells | under 6 ms; 60 fps held | 5.5 to 6.5 ms at 1,950 cells for the grid's share, before the renderer (`frames` example); 9 to 11 ms on the Intel Mac while it was busy, to be rerun |
 | Open 1 million rows by 50 columns (memory) to first frame | under 100 ms after load | n/a |
 | Sort by one numeric key | under 150 ms, off the main thread | 51 ms |
 | Sort by two keys | under 200 ms | 68 ms |

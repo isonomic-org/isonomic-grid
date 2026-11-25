@@ -23,6 +23,9 @@ use crate::state::GridState;
 const HAIRLINE: Pixels = px(1.);
 /// The caret, and the rule under a cell being edited.
 const CARET: Pixels = px(2.);
+/// The most lines of text never seen before that one frame shapes.
+/// The rest are left for the frames that follow.
+const NEW_LINES_PER_FRAME: usize = 256;
 /// Cell padding, as a share of the root font size.
 const PADDING_REMS: f32 = 0.375;
 
@@ -302,6 +305,7 @@ impl Element for GridElement {
             text: colors.foreground,
             header: colors.muted,
         });
+        frame.lines.begin_frame(NEW_LINES_PER_FRAME);
         window.with_content_mask(Some(ContentMask { bounds }), |window| {
             window.paint_quad(fill(bounds, colors.background));
             for cell in cells.iter() {
@@ -315,8 +319,10 @@ impl Element for GridElement {
                 let inner = cell.bounds.size.width - padding * 2.0;
                 let mut caret_x = px(0.);
                 let mut composed = None;
-                if !cell.text.is_empty() {
-                    let line = frame.lines.line(&cell.text, cell.header, || {
+                let line = if cell.text.is_empty() {
+                    None
+                } else {
+                    frame.lines.line(&cell.text, cell.header, || {
                         let run = TextRun {
                             len: cell.text.len(),
                             font: style.font(),
@@ -326,7 +332,9 @@ impl Element for GridElement {
                             strikethrough: None,
                         };
                         window.text_system().shape_line(cell.text.clone(), font_size, &[run], None)
-                    });
+                    })
+                };
+                if let Some(line) = line {
                     if let Some(edit) = &cell.editing {
                         caret_x = line.x_for_index(edit.caret.min(cell.text.len()));
                         // Text longer than the cell slides left so the
@@ -366,6 +374,11 @@ impl Element for GridElement {
                     let color = if edit.refused { colors.error } else { colors.caret };
                     window.paint_quad(fill(mark, color));
                 }
+            }
+            frame.lines.end_frame();
+            if frame.lines.deferred() > 0 {
+                // Some text is still to be shaped: draw again.
+                window.request_animation_frame();
             }
             for rule in &frame.rules {
                 window.paint_quad(fill(*rule, colors.border));
