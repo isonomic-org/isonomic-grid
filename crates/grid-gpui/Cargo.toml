@@ -6,6 +6,11 @@ edition.workspace = true
 publish.workspace = true
 license.workspace = true
 
+[features]
+# Builds the view on the component library's optional faster backend.
+# A host turns this on for the whole build or not at all.
+fast = ["ui/fast"]
+
 [dependencies]
 grid-core.workspace = true
 grid-query.workspace = true

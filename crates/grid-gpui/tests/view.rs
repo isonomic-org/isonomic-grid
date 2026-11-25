@@ -8,7 +8,9 @@ extern crate ui as gpui;
 
 mod common;
 
-use common::{active, click, keys, open, settle, text};
+use common::{active, click, frame, keys, open, settle, text};
+use std::time::Duration;
+
 use grid_core::{ColumnId, ColumnSpec, ColumnType, Table, Value};
 use grid_gpui::{GridState, GridView};
 use grid_interact::{Cell, Selection};
@@ -188,6 +190,8 @@ fn dragging_the_scrollbar_crosses_a_million_rows(cx: &mut TestAppContext) {
         pressed_button: Some(left),
         ..Default::default()
     });
+    // The scrollbar redraws a drag at most so many times a second.
+    cx.executor().advance_clock(Duration::from_millis(100));
     settle(cx);
     let middle = rows(&view, cx).start;
     assert!((490_000..510_000).contains(&middle), "about the middle: {middle}");
@@ -250,7 +254,10 @@ fn a_screen_of_new_text_is_shaped_over_several_frames(cx: &mut TestAppContext) {
         let state = cx.new(|cx| GridState::new(table, cx));
         GridView::new(state, cx)
     });
+    // A frame that left text unshaped asks for another; here the view
+    // is told, as the running window would tell it.
     let draw = |cx: &mut VisualTestContext| {
+        view.update(cx, |_, cx| cx.notify());
         cx.update(|window, cx| window.draw(cx).clear(cx));
         view.read_with(cx, |view, _| (view.take_line_counts().1, view.deferred_lines()))
     };
@@ -326,8 +333,8 @@ fn a_drag_selects_a_range_and_scrolls_past_the_edge(cx: &mut TestAppContext) {
     let first = range(&view, cx).1.1;
     let visible = view.read_with(cx, |view, _| view.visible_rows());
     assert!(visible.start > 0 && first >= visible.end - 2, "scrolled, head on the last row shown");
-    settle(cx);
-    settle(cx);
+    frame(&view, cx);
+    frame(&view, cx);
     let later = range(&view, cx).1.1;
     assert!(later > first, "it keeps going: {first} then {later}");
 

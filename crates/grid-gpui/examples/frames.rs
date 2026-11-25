@@ -5,7 +5,8 @@
 //! visible cells, laying them out and painting them into a scene. The
 //! time the renderer then takes to draw that scene is not included.
 //!
-//! `cargo run --release -p grid-gpui --example frames`
+//! `cargo run --release -p grid-gpui --example frames`, and with
+//! `--features grid-gpui/fast` for the optional faster backend.
 
 extern crate ui as gpui;
 
@@ -19,9 +20,10 @@ use ui::assets::Assets;
 use ui::{AppContext as _, Bounds, HeadlessAppContext, WindowBounds, WindowOptions, px, size};
 
 const ROWS: usize = 100_000;
-const COLUMNS: usize = 50;
+const COLUMNS: usize = 64;
 const FRAMES: usize = 300;
-/// Narrow columns, so about fifty fit across the window.
+/// Narrow columns, so all sixty-four fit across the window: with the
+/// header, about 2,500 cells in view, the size the budget is set for.
 const WIDTH_REMS: f32 = 3.2;
 
 fn table() -> Table {
@@ -76,7 +78,7 @@ fn main() -> ExitCode {
     let options = WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(Bounds {
             origin: Default::default(),
-            size: size(px(2560.), px(1440.)),
+            size: size(px(3264.), px(1440.)),
         })),
         focus: false,
         show: false,
