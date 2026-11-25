@@ -120,35 +120,20 @@ pub fn execute(table: &Table, query: &ViewQuery) -> Result<ViewResult, SourceErr
         all_keys.push(keys(table, column(&sort.column)?, &rows, sort.direction));
     }
     let ids = table.row_ids();
-    let id_of = |at: u32| ids[rows[at as usize] as usize];
-    // One and two keys, the common cases, sort packed tuples so the
-    // comparison never leaves the element being moved.
-    let order: Vec<u32> = match all_keys.as_slice() {
-        [] => (0..rows.len() as u32).collect(),
-        [only] => {
-            let mut packed: Vec<(Key, grid_core::RowId, u32)> =
-                (0..rows.len() as u32).map(|at| (only[at as usize], id_of(at), at)).collect();
-            packed.sort_unstable();
-            packed.into_iter().map(|(_, _, at)| at).collect()
+    // Ties break by row ID. Sorting is stable and runs from the
+    // least significant key to the most, so the starting order is the
+    // final tie-break: row IDs, which table order already follows
+    // unless a deleted row was put back.
+    let mut order: Vec<u32> = (0..rows.len() as u32).collect();
+    if !all_keys.is_empty() {
+        let id_of = |at: u32| ids[rows[at as usize] as usize];
+        if !rows.windows(2).all(|pair| ids[pair[0] as usize] < ids[pair[1] as usize]) {
+            order.sort_by_key(|at| id_of(*at));
         }
-        [first, second] => {
-            let mut packed: Vec<(Key, Key, grid_core::RowId, u32)> = (0..rows.len() as u32)
-                .map(|at| (first[at as usize], second[at as usize], id_of(at), at))
-                .collect();
-            packed.sort_unstable();
-            packed.into_iter().map(|(_, _, _, at)| at).collect()
+        for keys in all_keys.iter().rev() {
+            crate::radix::sort_by(&mut order, keys);
         }
-        many => {
-            let mut order: Vec<u32> = (0..rows.len() as u32).collect();
-            order.sort_unstable_by(|a, b| {
-                many.iter()
-                    .map(|keys| keys[*a as usize].cmp(&keys[*b as usize]))
-                    .find(|ordering| ordering.is_ne())
-                    .unwrap_or_else(|| id_of(*a).cmp(&id_of(*b)))
-            });
-            order
-        }
-    };
+    }
     let sorted: Vec<u32> = order.iter().map(|at| rows[*at as usize]).collect();
     let group_keys: Vec<Vec<Key>> = all_keys
         .iter()

@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use crate::Value;
+use crate::{TextColumn, Value};
 
 /// A column's stable name within its table.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -104,7 +104,7 @@ pub enum Column {
     /// durations, choices and references.
     Int(Vec<i64>, Vec<bool>),
     Float(Vec<f64>, Vec<bool>),
-    Text(Vec<Arc<str>>, Vec<bool>),
+    Text(TextColumn),
     Other(Vec<Value>),
 }
 
@@ -113,7 +113,7 @@ impl Column {
         match ty {
             ColumnType::Bool => Self::Bool(Vec::new(), Vec::new()),
             ColumnType::Float => Self::Float(Vec::new(), Vec::new()),
-            ColumnType::Text => Self::Text(Vec::new(), Vec::new()),
+            ColumnType::Text => Self::Text(TextColumn::default()),
             ColumnType::Int
             | ColumnType::Date
             | ColumnType::DateTime
@@ -126,10 +126,8 @@ impl Column {
 
     pub fn len(&self) -> usize {
         match self {
-            Self::Bool(_, valid)
-            | Self::Int(_, valid)
-            | Self::Float(_, valid)
-            | Self::Text(_, valid) => valid.len(),
+            Self::Bool(_, valid) | Self::Int(_, valid) | Self::Float(_, valid) => valid.len(),
+            Self::Text(text) => text.len(),
             Self::Other(values) => values.len(),
         }
     }
@@ -140,10 +138,10 @@ impl Column {
 
     pub fn is_null(&self, row: usize) -> bool {
         match self {
-            Self::Bool(_, valid)
-            | Self::Int(_, valid)
-            | Self::Float(_, valid)
-            | Self::Text(_, valid) => !valid.get(row).copied().unwrap_or(false),
+            Self::Bool(_, valid) | Self::Int(_, valid) | Self::Float(_, valid) => {
+                !valid.get(row).copied().unwrap_or(false)
+            }
+            Self::Text(text) => !text.is_valid(row),
             Self::Other(values) => values.get(row).is_none_or(Value::is_null),
         }
     }
@@ -156,7 +154,7 @@ impl Column {
         match self {
             Self::Bool(data, _) => Value::Bool(data[row]),
             Self::Float(data, _) => Value::Float(data[row]),
-            Self::Text(data, _) => Value::Text(data[row].clone()),
+            Self::Text(text) => Value::Text(text.get(row).clone()),
             Self::Other(values) => values[row].clone(),
             Self::Int(data, _) => {
                 let v = data[row];
@@ -209,13 +207,10 @@ impl Column {
             Self::Float(data, valid) => {
                 store(data, valid, row, value.as_f64().unwrap_or(0.0), present);
             }
-            Self::Text(data, valid) => {
-                let text = match value {
-                    Value::Text(text) => text.clone(),
-                    _ => Arc::from(""),
-                };
-                store(data, valid, row, text, present);
-            }
+            Self::Text(text) => match value {
+                Value::Text(new) => text.put(row, new, present),
+                _ => text.put(row, &Arc::from(""), present),
+            },
             Self::Other(values) => {
                 if row >= values.len() {
                     values.push(value.clone());
@@ -240,10 +235,7 @@ impl Column {
                 data.remove(row);
                 valid.remove(row);
             }
-            Self::Text(data, valid) => {
-                data.remove(row);
-                valid.remove(row);
-            }
+            Self::Text(text) => text.remove(row),
             Self::Other(values) => {
                 values.remove(row);
             }

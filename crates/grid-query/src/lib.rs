@@ -15,6 +15,7 @@ mod exec;
 mod filter;
 mod keys;
 mod memory;
+mod radix;
 
 pub use aggregate::aggregate;
 pub use bitmap::Bitmap;
