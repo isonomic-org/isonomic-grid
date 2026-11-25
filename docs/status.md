@@ -2,6 +2,24 @@
 
 Newest first.
 
+## 2026-11-25: the grid draws and takes input
+
+`ui` re-exports the component library at one pinned revision. `grid-gpui` adds:
+
+- `GridState`: an in-memory source, the view query, visible columns and widths, the selection, the scroll position and the edit log.
+- `GridView`: one element paints the visible cells and the header and nothing else; a click on a header sorts, a click on a group row opens or closes it; the pointer and the keyboard move and extend the selection and scroll it into view; the wheel scrolls in 64-bit offsets; copy writes tab-separated text; undo and redo go through the edit log.
+
+Tested in a headless window with real layout and real events: a 100,000-row grid paints one screenful of cells at the top and at the very end; pointer and keyboard selection with paging; sort and group toggle from clicks; edit, copy, undo.
+
+**Not yet, and known rough edges.**
+
+1. It has never been opened on a screen. Headless tests check layout and behavior, not pixels. A playground and screenshots are next.
+2. No cell editor yet: `GridState::set_cell_text` is the entry point an editor will call.
+3. Each visible cell's text is shaped every frame; a per-frame shaping cache is the first paint optimisation.
+4. No scrollbars, column resize or reorder, or pin controls. The layout crate already supports pins and the scaled scrollbar range.
+5. The view takes the in-memory source only; windowed sources come with the engine integration.
+6. No semantic shadow for assistive technology yet.
+
 ## 2026-11-25: text is dictionary-encoded; sorting is a stable radix sort
 
 - Text columns keep each distinct string once and a code per row. The dictionary's folded sort order is computed once and reused until a new string arrives. Filters and search test each distinct string once.

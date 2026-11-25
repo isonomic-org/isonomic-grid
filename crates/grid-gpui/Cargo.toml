@@ -1,0 +1,21 @@
+[package]
+name = "grid-gpui"
+description = "The grid view: state, painted cells, scrolling, selection and keyboard navigation."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+grid-core.workspace = true
+grid-query.workspace = true
+grid-layout.workspace = true
+grid-interact.workspace = true
+grid-formats.workspace = true
+ui = { path = "../ui" }
+
+[dev-dependencies]
+ui = { path = "../ui", features = ["test-support"] }
+
+[lints]
+workspace = true

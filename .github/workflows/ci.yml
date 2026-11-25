@@ -34,3 +34,4 @@ jobs:
     secrets: inherit
     with:
       features: --all-features --locked
+      linux-gui-libs: true
