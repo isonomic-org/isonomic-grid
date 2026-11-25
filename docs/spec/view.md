@@ -71,7 +71,7 @@ Keyboard operation is complete without a pointer. Right-to-left layout mirrors p
 
 ## B16. Performance budgets
 
-Budgets are for the Intel test Mac, release build, one million rows unless stated. The "measured" column is the scratch benchmark on a 2-core 2.1 GHz Linux machine (A3): single operations in isolation, not the full pipeline.
+Budgets are for the Intel test Mac, release build, one million rows unless stated. The "measured" column is the scratch benchmark on a 2-core 2.1 GHz Linux machine: single operations in isolation, not the full pipeline.
 
 | Measure | Budget | Measured in isolation |
 |---|---|---|
