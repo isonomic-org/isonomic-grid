@@ -12,9 +12,10 @@ use grid_layout::{Axis, Band, GridLayout, Viewport};
 use ui::{
     App, Bounds, ContentMask, DispatchPhase, Element, ElementId, Entity, GlobalElementId, Hsla,
     InspectorElementId, IntoElement, LayoutId, MouseMoveEvent, MouseUpEvent, Pixels, Point,
-    SharedString, Style, TextAlign, TextRun, Window, fill, point, px, relative, size,
+    SharedString, Style, TextAlign, TextRun, Window, fill, point, px, quad, relative, size,
 };
 
+use crate::lines::{Face, LineCache};
 use crate::state::GridState;
 
 /// The line between rows.
@@ -34,6 +35,10 @@ pub struct Frame {
     pub painted: usize,
     /// Rows in the scrolling band.
     pub page: usize,
+    /// Shaped cell text, kept between frames.
+    pub lines: LineCache,
+    /// The lines under rows, one per row.
+    rules: Vec<Bounds<Pixels>>,
 }
 
 pub type SharedFrame = Rc<RefCell<Frame>>;
@@ -55,6 +60,8 @@ pub struct Painted {
     right: bool,
     header: bool,
     selected: bool,
+    /// The cell the keyboard acts on.
+    active: bool,
     /// Being edited: paint a caret after the text, and whether the
     /// last commit was refused.
     editing: Option<bool>,
@@ -65,6 +72,7 @@ pub struct GridElement {
     pub focus: ui::FocusHandle,
     pub state: Entity<GridState>,
     pub frame: SharedFrame,
+    pub scroll: crate::scroll::GridScrollHandle,
     pub colors: Colors,
 }
 
@@ -129,7 +137,17 @@ impl Element for GridElement {
         let at = |x: f32, y: f32, w: f32, h: f32| {
             Bounds::new(bounds.origin + point(px(x), px(y)), size(px(w), px(h)))
         };
+        let moved = self.scroll.take_moved();
+        let mut rules = Vec::new();
         let (cells, layout, viewport, page) = self.state.update(cx, |state, _| {
+            // A scrollbar that was dragged since the last frame says
+            // where to be; the layout below clamps what it asked for.
+            if let Some(x) = moved.0 {
+                state.scroll.0 = x.max(0.0);
+            }
+            if let Some(y) = moved.1 {
+                state.scroll.1 = y.max(0.0);
+            }
             let layout = GridLayout {
                 rows: Axis::uniform(state.row_count(), row_height),
                 columns: Axis::variable(state.widths().iter().map(|rems| rems * rem).collect()),
@@ -183,8 +201,24 @@ impl Element for GridElement {
                                 && state.editing().is_none_or(|e| e.cell != cell),
                             header: *row_pinned || *column_pinned,
                             selected: !group && state.selection().contains(cell),
+                            active: !group && state.selection().active == cell,
                         });
                     }
+                }
+            }
+            // One line under each row, kept out from under pinned rows.
+            let hairline = f32::from(HAIRLINE);
+            let lead_end = slots(&row_bands[0], &layout.rows)
+                .last()
+                .map_or(row_height, |(_, y, height, _)| y + height);
+            let tail_start =
+                if row_bands[2].indices.is_empty() { viewport.height } else { row_bands[2].start };
+            let across = right_edge.min(viewport.width);
+            rules.push(at(0.0, row_height - hairline, across, hairline));
+            for (_, y, height, pinned) in &rows {
+                let line = y + height - hairline;
+                if *pinned || (line >= lead_end && line < tail_start) {
+                    rules.push(at(0.0, line, across, hairline));
                 }
             }
             for (column, x, width, _) in &columns {
@@ -194,13 +228,20 @@ impl Element for GridElement {
                     right: state.is_numeric(*column),
                     header: true,
                     selected: false,
+                    active: false,
                     editing: None,
                 });
             }
             (cells, layout, viewport, page)
         });
+        let body = Bounds::new(
+            bounds.origin + point(px(0.), px(layout.header)),
+            size(bounds.size.width, (bounds.size.height - px(layout.header)).max(px(0.))),
+        );
+        self.scroll.record(body, &layout, &viewport);
         let mut frame = self.frame.borrow_mut();
         frame.painted = cells.len();
+        frame.rules = rules;
         frame.page = page;
         frame.origin = bounds.origin;
         frame.layout = Some(layout);
@@ -237,6 +278,14 @@ impl Element for GridElement {
                 view.update(cx, |view, _| view.mouse_up());
             }
         });
+        let mut frame = self.frame.borrow_mut();
+        let frame = &mut *frame;
+        frame.lines.set_face(Face {
+            font: style.font(),
+            size: font_size,
+            text: colors.foreground,
+            header: colors.muted,
+        });
         window.with_content_mask(Some(ContentMask { bounds }), |window| {
             window.paint_quad(fill(bounds, colors.background));
             for cell in cells.iter() {
@@ -246,31 +295,32 @@ impl Element for GridElement {
                 if cell.selected {
                     window.paint_quad(fill(cell.bounds, colors.selection));
                 }
-                let rule = Bounds::new(
-                    cell.bounds.origin + point(px(0.), cell.bounds.size.height - HAIRLINE),
-                    size(cell.bounds.size.width, HAIRLINE),
-                );
-                window.paint_quad(fill(rule, colors.border));
                 let origin = cell.bounds.origin + point(padding, padding);
                 let mut caret_x = origin.x;
                 if !cell.text.is_empty() {
-                    let color = if cell.header { colors.muted } else { colors.foreground };
-                    let run = TextRun {
-                        len: cell.text.len(),
-                        font: style.font(),
-                        color,
-                        background_color: None,
-                        underline: None,
-                        strikethrough: None,
-                    };
-                    let line =
-                        window.text_system().shape_line(cell.text.clone(), font_size, &[run], None);
+                    let line = frame.lines.line(&cell.text, cell.header, || {
+                        let run = TextRun {
+                            len: cell.text.len(),
+                            font: style.font(),
+                            color: if cell.header { colors.muted } else { colors.foreground },
+                            background_color: None,
+                            underline: None,
+                            strikethrough: None,
+                        };
+                        window.text_system().shape_line(cell.text.clone(), font_size, &[run], None)
+                    });
                     caret_x += line.width;
                     let inner = cell.bounds.size.width - padding * 2.0;
                     let align = if cell.right { TextAlign::Right } else { TextAlign::Left };
-                    window.with_content_mask(Some(ContentMask { bounds: cell.bounds }), |window| {
+                    if line.width > inner || cell.editing.is_some() {
+                        // Text wider than its cell is cut at the cell's edge.
+                        let mask = Some(ContentMask { bounds: cell.bounds });
+                        window.with_content_mask(mask, |window| {
+                            let _ = line.paint(origin, line_height, align, Some(inner), window, cx);
+                        });
+                    } else {
                         let _ = line.paint(origin, line_height, align, Some(inner), window, cx);
-                    });
+                    }
                 }
                 if let Some(refused) = cell.editing {
                     let caret = Bounds::new(point(caret_x, origin.y), size(CARET, line_height));
@@ -282,6 +332,23 @@ impl Element for GridElement {
                     window
                         .paint_quad(fill(mark, if refused { colors.error } else { colors.caret }));
                 }
+            }
+            for rule in &frame.rules {
+                window.paint_quad(fill(*rule, colors.border));
+            }
+            // The active cell's outline goes over the rules around it.
+            let focused = self.focus.is_focused(window);
+            for cell in cells.iter().filter(|cell| cell.active && cell.editing.is_none()) {
+                let color = if focused { colors.caret } else { colors.muted };
+                let clear = ui::transparent_black();
+                window.paint_quad(quad(
+                    cell.bounds,
+                    px(0.),
+                    clear,
+                    CARET,
+                    color,
+                    Default::default(),
+                ));
             }
             let handler = ui::ElementInputHandler::new(bounds, self.view.clone());
             window.handle_input(&self.focus, handler, cx);
