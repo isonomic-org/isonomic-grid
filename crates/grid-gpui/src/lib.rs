@@ -14,7 +14,9 @@
 extern crate ui as gpui;
 
 mod actions;
+mod edit;
 mod element;
+mod input;
 mod lines;
 mod pointer;
 mod scroll;
@@ -22,7 +24,8 @@ mod state;
 mod view;
 
 pub use actions::*;
-pub use state::{Editing, GridEvent, GridState};
+pub use edit::Editing;
+pub use state::{GridEvent, GridState};
 pub use view::GridView;
 
 /// Registers the grid's key bindings. Call once at start-up.

@@ -2,6 +2,14 @@
 
 Newest first.
 
+## 2026-11-25: the cell editor has a caret; paste, cut and range clear
+
+- The line being edited is a headless type in `grid-interact`: text, a caret and the part an input method is composing, with offsets that never split a character.
+- Double click, F2 or Enter opens a cell with its own text; then Left, Right, Home and End move the caret, Delete removes forward, and long text slides to keep the caret in the cell. An edit begun by typing still confirms and moves on an arrow key.
+- Input methods compose in place, underlined, through the platform text input interface.
+- Paste puts tab-separated text on the active cell and down and right from it, stepping over group rows; one value pasted over a range fills the range; rows past the last become new rows; text a column cannot hold refuses the whole paste and the state emits why. Cut copies and clears. Delete clears every editable cell in the selection. Each is one undo step, and each is limited to 200,000 cells.
+- The pointer shows a column-resize shape over a header edge.
+
 ## 2026-11-25: scrollbars, a shaped-line cache and frame timings
 
 - The component library's standard scrollbars sit over the grid, read a handle that reports each axis scaled into a range they hold exactly, and write a dragged thumb back as a 64-bit offset. An axis nobody dragged is left exactly where it was. Tested by dragging the vertical thumb across one million rows: halfway is the middle, and past the end is the last row.
@@ -29,9 +37,9 @@ Tested in a headless window with real layout and real events: a 100,000-row grid
 **Not yet, and known rough edges.**
 
 1. It has been rendered offscreen with the real renderer on Linux (software Vulkan); the frames are in `docs/images/`, made by the `screenshot` example. The `playground` example opens it in a window; it was run on Linux under a virtual display with software rendering and driven with real pointer and key events (click, type, shortcuts, wheel). On macOS (Intel, macOS 15) every test passes and the `screenshot` example renders its frames with the native renderer; the window itself has not been opened there, and nobody has used it by hand yet.
-2. Cells edit in place: typing starts an edit, Enter confirms and moves down, Escape cancels, F2 amends, Delete clears, and text the column cannot hold is refused with the editor left open. The editor is a single line with the caret at the end; no composition, and no pickers for dates or choices yet.
+2. Cells edit in place; see the entry above. The editor is one line with a caret and no selection of its own, and there are no pickers for dates or choices yet. A refused paste is reported as an event, which nothing shows yet.
 3. A frame of entirely new text still shapes every cell; see the timings above.
-4. A column's right edge in the header drags to resize it, down to a minimum width; the pointer does not change shape over the edge yet. The standard scrollbars work. There is no column reorder and there are no pin controls, though the layout crate already supports pins.
+4. A column's right edge in the header drags to resize it, down to a minimum width, and the pointer shows it. The standard scrollbars work. There is no column reorder and there are no pin controls, though the layout crate already supports pins.
 5. The view takes the in-memory source only; windowed sources come with the engine integration.
 6. No semantic shadow for assistive technology yet.
 

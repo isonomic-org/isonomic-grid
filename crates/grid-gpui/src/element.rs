@@ -10,9 +10,10 @@ use std::rc::Rc;
 use grid_interact::Cell;
 use grid_layout::{Axis, Band, GridLayout, Viewport};
 use ui::{
-    App, Bounds, ContentMask, DispatchPhase, Element, ElementId, Entity, GlobalElementId, Hsla,
-    InspectorElementId, IntoElement, LayoutId, MouseMoveEvent, MouseUpEvent, Pixels, Point,
-    SharedString, Style, TextAlign, TextRun, Window, fill, point, px, quad, relative, size,
+    App, Bounds, ContentMask, CursorStyle, DispatchPhase, Element, ElementId, Entity,
+    GlobalElementId, Hitbox, HitboxBehavior, Hsla, InspectorElementId, IntoElement, LayoutId,
+    MouseMoveEvent, MouseUpEvent, Pixels, Point, SharedString, Style, TextAlign, TextRun, Window,
+    fill, point, px, quad, relative, size,
 };
 
 use crate::lines::{Face, LineCache};
@@ -62,9 +63,15 @@ pub struct Painted {
     selected: bool,
     /// The cell the keyboard acts on.
     active: bool,
-    /// Being edited: paint a caret after the text, and whether the
-    /// last commit was refused.
-    editing: Option<bool>,
+    /// Being edited: where the caret is, what is being composed, and
+    /// whether the last commit was refused.
+    editing: Option<EditPaint>,
+}
+
+struct EditPaint {
+    caret: usize,
+    marked: Option<std::ops::Range<usize>>,
+    refused: bool,
 }
 
 pub struct GridElement {
@@ -73,6 +80,8 @@ pub struct GridElement {
     pub state: Entity<GridState>,
     pub frame: SharedFrame,
     pub scroll: crate::scroll::GridScrollHandle,
+    /// Whether a column edge is under the pointer or being dragged.
+    pub resizing: bool,
     pub colors: Colors,
 }
 
@@ -100,7 +109,7 @@ fn slots(band: &Band, axis: &Axis) -> Vec<(usize, f32, f32, bool)> {
 
 impl Element for GridElement {
     type RequestLayoutState = ();
-    type PrepaintState = Vec<Painted>;
+    type PrepaintState = (Vec<Painted>, Hitbox);
 
     fn id(&self) -> Option<ElementId> {
         None
@@ -131,7 +140,7 @@ impl Element for GridElement {
         _: &mut (),
         window: &mut Window,
         cx: &mut App,
-    ) -> Vec<Painted> {
+    ) -> (Vec<Painted>, Hitbox) {
         let rem = f32::from(window.rem_size());
         let row_height = f32::from(window.line_height()) + 2.0 * PADDING_REMS * rem;
         let at = |x: f32, y: f32, w: f32, h: f32| {
@@ -189,11 +198,15 @@ impl Element for GridElement {
                         let editing =
                             state.editing().filter(|editing| editing.cell == cell).cloned();
                         let text = match &editing {
-                            Some(editing) => editing.text.clone(),
+                            Some(editing) => editing.text().to_owned(),
                             None => state.cell_text(*row, *column),
                         };
                         cells.push(Painted {
-                            editing: editing.map(|editing| editing.error.is_some()),
+                            editing: editing.map(|editing| EditPaint {
+                                caret: editing.line.caret(),
+                                marked: editing.line.marked(),
+                                refused: editing.error.is_some(),
+                            }),
                             bounds: at(*x, *y, width, *height),
                             text: text.replace(['\n', '\r'], " ").into(),
                             right: state.is_numeric(*column)
@@ -246,7 +259,7 @@ impl Element for GridElement {
         frame.origin = bounds.origin;
         frame.layout = Some(layout);
         frame.viewport = Some(viewport);
-        cells
+        (cells, window.insert_hitbox(bounds, HitboxBehavior::Normal))
     }
 
     fn paint(
@@ -255,10 +268,13 @@ impl Element for GridElement {
         _: Option<&InspectorElementId>,
         bounds: Bounds<Pixels>,
         _: &mut (),
-        cells: &mut Vec<Painted>,
+        (cells, hitbox): &mut (Vec<Painted>, Hitbox),
         window: &mut Window,
         cx: &mut App,
     ) {
+        if self.resizing {
+            window.set_cursor_style(CursorStyle::ResizeColumn, hitbox);
+        }
         let colors = self.colors;
         let style = window.text_style();
         let font_size = style.font_size.to_pixels(window.rem_size());
@@ -295,8 +311,10 @@ impl Element for GridElement {
                 if cell.selected {
                     window.paint_quad(fill(cell.bounds, colors.selection));
                 }
-                let origin = cell.bounds.origin + point(padding, padding);
-                let mut caret_x = origin.x;
+                let mut origin = cell.bounds.origin + point(padding, padding);
+                let inner = cell.bounds.size.width - padding * 2.0;
+                let mut caret_x = px(0.);
+                let mut composed = None;
                 if !cell.text.is_empty() {
                     let line = frame.lines.line(&cell.text, cell.header, || {
                         let run = TextRun {
@@ -309,8 +327,15 @@ impl Element for GridElement {
                         };
                         window.text_system().shape_line(cell.text.clone(), font_size, &[run], None)
                     });
-                    caret_x += line.width;
-                    let inner = cell.bounds.size.width - padding * 2.0;
+                    if let Some(edit) = &cell.editing {
+                        caret_x = line.x_for_index(edit.caret.min(cell.text.len()));
+                        // Text longer than the cell slides left so the
+                        // caret stays in it.
+                        origin.x -= (caret_x - inner + CARET).max(px(0.));
+                        composed = edit.marked.as_ref().map(|marked| {
+                            (line.x_for_index(marked.start), line.x_for_index(marked.end))
+                        });
+                    }
                     let align = if cell.right { TextAlign::Right } else { TextAlign::Left };
                     if line.width > inner || cell.editing.is_some() {
                         // Text wider than its cell is cut at the cell's edge.
@@ -322,15 +347,24 @@ impl Element for GridElement {
                         let _ = line.paint(origin, line_height, align, Some(inner), window, cx);
                     }
                 }
-                if let Some(refused) = cell.editing {
-                    let caret = Bounds::new(point(caret_x, origin.y), size(CARET, line_height));
+                if let Some(edit) = &cell.editing {
+                    let caret =
+                        Bounds::new(origin + point(caret_x, px(0.)), size(CARET, line_height));
                     window.paint_quad(fill(caret, colors.caret));
+                    if let Some((from, to)) = composed {
+                        // What an input method is still composing is underlined.
+                        let under = Bounds::new(
+                            origin + point(from, line_height - HAIRLINE),
+                            size(to - from, HAIRLINE),
+                        );
+                        window.paint_quad(fill(under, colors.foreground));
+                    }
                     let mark = Bounds::new(
                         cell.bounds.origin + point(px(0.), cell.bounds.size.height - CARET),
                         size(cell.bounds.size.width, CARET),
                     );
-                    window
-                        .paint_quad(fill(mark, if refused { colors.error } else { colors.caret }));
+                    let color = if edit.refused { colors.error } else { colors.caret };
+                    window.paint_quad(fill(mark, color));
                 }
             }
             for rule in &frame.rules {

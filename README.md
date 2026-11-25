@@ -17,7 +17,7 @@ The frames above are the real renderer, run offscreen: `cargo run -p grid-gpui -
 | `grid-core` | Values, column types, the columnar table, the view query, the `DataSource` contract. |
 | `grid-query` | Filter, search, sort, group, aggregate, flatten; `MemorySource`. |
 | `grid-layout` | Row and column axes, pinned regions, 64-bit scrolling, hit testing. |
-| `grid-interact` | Active cell and ranges, keyboard navigation, row selection, the edit log. |
+| `grid-interact` | Active cell and ranges, keyboard navigation, row selection, the edit log, the line being edited in a cell. |
 | `grid-formats` | Delimited text in and out, typed parsing and formatting, import with type inference, paste. |
 | `ui` | The component library, re-exported at one pinned revision. |
 | `grid-gpui` | The view: state, one element painting the visible cells, pointer, keyboard, in-cell editing, scrolling and scrollbars. |

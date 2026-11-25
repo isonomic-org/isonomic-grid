@@ -119,3 +119,54 @@ fn the_edit_log_undoes_and_redoes_against_a_source() {
     assert!(log.undo(&mut source).unwrap().is_some(), "a refused edit leaves the log intact");
     assert_eq!(snapshot(&source), edited);
 }
+
+#[test]
+fn a_line_edits_between_characters_only() {
+    use grid_interact::LineEdit;
+    let mut line = LineEdit::new("héllo");
+    assert_eq!(line.caret(), 6);
+    line.move_to_start();
+    line.move_right();
+    line.move_right();
+    assert_eq!(line.caret(), 3, "past the two-byte character, not into it");
+    line.insert("X");
+    assert_eq!((line.text(), line.caret()), ("héXllo", 4));
+    assert!(line.backspace());
+    assert!(line.backspace());
+    assert_eq!((line.text(), line.caret()), ("hllo", 1));
+    assert!(line.delete());
+    assert_eq!(line.text(), "hlo");
+    line.move_left();
+    assert!(!line.backspace(), "nothing before the start");
+    line.move_to_end();
+    assert!(!line.delete(), "nothing after the end");
+
+    // An offset inside a character is moved back to its start, and
+    // ranges past the end are cut to the text.
+    let mut line = LineEdit::new("aé");
+    line.move_to(2);
+    assert_eq!(line.caret(), 1);
+    line.replace(Some(2..usize::MAX), "b", false);
+    assert_eq!(line.text(), "ab");
+    let backwards = std::ops::Range { start: 9, end: 3 };
+    line.replace(Some(backwards), "c", false);
+    assert_eq!(line.text(), "abc");
+}
+
+#[test]
+fn composed_text_is_replaced_until_it_is_kept() {
+    use grid_interact::LineEdit;
+    let mut line = LineEdit::new("a");
+    line.replace(None, "k", true);
+    assert_eq!((line.text(), line.marked()), ("ak", Some(1..2)));
+    line.replace(None, "か", true);
+    assert_eq!((line.text(), line.marked()), ("aか", Some(1..4)));
+    line.replace(None, "火", false);
+    assert_eq!((line.text(), line.marked(), line.caret()), ("a火", None, 4));
+    line.replace(None, "x", true);
+    line.unmark();
+    line.insert("y");
+    assert_eq!(line.text(), "a火xy", "kept text is not typed over");
+    line.replace(None, "", true);
+    assert_eq!(line.marked(), None, "composing nothing ends composition");
+}
