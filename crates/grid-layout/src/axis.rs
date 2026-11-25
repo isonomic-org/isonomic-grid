@@ -12,7 +12,7 @@ impl Sums {
         for (index, size) in sizes.iter().enumerate() {
             let at = index + 1;
             tree[at] += f64::from(*size);
-            let parent = at + (at & at.wrapping_neg());
+            let parent = at + at.isolate_lowest_one();
             if parent < tree.len() {
                 tree[parent] += tree[at];
             }
@@ -24,7 +24,7 @@ impl Sums {
         let mut at = index + 1;
         while at < self.tree.len() {
             self.tree[at] += delta;
-            at += at & at.wrapping_neg();
+            at += at.isolate_lowest_one();
         }
     }
 
@@ -34,7 +34,7 @@ impl Sums {
         let mut sum = 0.0;
         while at > 0 {
             sum += self.tree[at];
-            at -= at & at.wrapping_neg();
+            at -= at.isolate_lowest_one();
         }
         sum
     }
