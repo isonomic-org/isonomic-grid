@@ -2,6 +2,21 @@
 
 Newest first.
 
+## 2026-11-25: scrollbars, a shaped-line cache and frame timings
+
+- The component library's standard scrollbars sit over the grid, read a handle that reports each axis scaled into a range they hold exactly, and write a dragged thumb back as a 64-bit offset. An axis nobody dragged is left exactly where it was. Tested by dragging the vertical thumb across one million rows: halfway is the middle, and past the end is the last row.
+- Cell text is shaped once and kept in a bounded two-generation cache keyed by the text, on top of the toolkit's own cache of the previous frame. Text is clipped only when it is wider than its cell. Each row has one rule under it instead of one per cell.
+- The active cell has an outline.
+- `cargo run --release -p grid-gpui --example frames` times the grid's own share of a frame (reading the visible cells, laying them out, painting them into a scene; not the renderer drawing that scene) on 100,000 rows by 50 columns in a 2560 by 1440 window, 1,950 cells a frame.
+
+| 2-core 2.1 GHz Linux machine | mean | 99th percentile | text from the cache |
+|---|---|---|---|
+| Scrolling three rows a frame | 5.5 ms | 12.6 ms | 97.5% |
+| A whole new screen every frame | 19.7 ms | 28.9 ms | 58.7% |
+| A screen a frame, back and forth | 5.5 ms | 12.2 ms | 99.7% |
+
+Before these changes the first line was 7.5 ms. Of what remains, about 3.3 ms is the toolkit painting glyphs, one sprite lookup each; a whole new screen adds about 4.5 ms of shaping text never seen before. Neither has been measured on macOS yet.
+
 ## 2026-11-25: the grid draws and takes input
 
 `ui` re-exports the component library at one pinned revision. `grid-gpui` adds:
@@ -15,8 +30,8 @@ Tested in a headless window with real layout and real events: a 100,000-row grid
 
 1. It has been rendered offscreen with the real renderer on Linux (software Vulkan); the frames are in `docs/images/`, made by the `screenshot` example. The `playground` example opens it in a window; it was run on Linux under a virtual display with software rendering and driven with real pointer and key events (click, type, shortcuts, wheel). On macOS (Intel, macOS 15) every test passes and the `screenshot` example renders its frames with the native renderer; the window itself has not been opened there, and nobody has used it by hand yet.
 2. Cells edit in place: typing starts an edit, Enter confirms and moves down, Escape cancels, F2 amends, Delete clears, and text the column cannot hold is refused with the editor left open. The editor is a single line with the caret at the end; no composition, and no pickers for dates or choices yet.
-3. Each visible cell's text is shaped every frame; a per-frame shaping cache is the first paint optimisation.
-4. A column's right edge in the header drags to resize it, down to a minimum width; the pointer does not change shape over the edge yet. No scrollbars, column reorder, or pin controls. The layout crate already supports pins and the scaled scrollbar range.
+3. A frame of entirely new text still shapes every cell; see the timings above.
+4. A column's right edge in the header drags to resize it, down to a minimum width; the pointer does not change shape over the edge yet. The standard scrollbars work. There is no column reorder and there are no pin controls, though the layout crate already supports pins.
 5. The view takes the in-memory source only; windowed sources come with the engine integration.
 6. No semantic shadow for assistive technology yet.
 

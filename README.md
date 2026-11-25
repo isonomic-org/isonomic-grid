@@ -20,10 +20,10 @@ The frames above are the real renderer, run offscreen: `cargo run -p grid-gpui -
 | `grid-interact` | Active cell and ranges, keyboard navigation, row selection, the edit log. |
 | `grid-formats` | Delimited text in and out, typed parsing and formatting, import with type inference, paste. |
 | `ui` | The component library, re-exported at one pinned revision. |
-| `grid-gpui` | The view: state, one element painting the visible cells, pointer, keyboard and scrolling. |
+| `grid-gpui` | The view: state, one element painting the visible cells, pointer, keyboard, in-cell editing, scrolling and scrollbars. |
 | `xtask` | Repository checks. |
 
-The view crates need the component library's system dependencies to build; the headless crates do not. A playground arrives next; see `docs/status.md`.
+The view crates need the component library's system dependencies to build; the headless crates do not. See `docs/status.md` for where things stand.
 
 ## Use
 
@@ -50,7 +50,7 @@ let page = source.fetch(&FetchRequest {   // or one window of one group
 cargo run -p grid-gpui --example playground
 ```
 
-Opens the grid in a window. It needs the component library's system dependencies; on Linux those are the usual windowing, font and Vulkan development packages.
+Opens the grid in a window. `cargo run --release -p grid-gpui --example frames` times the grid's share of a frame while it scrolls. Both need the component library's system dependencies; on Linux those are the usual windowing, font and Vulkan development packages.
 
 ## Develop
 

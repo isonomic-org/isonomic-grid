@@ -51,11 +51,15 @@ impl ScrollScale {
 
     pub fn to_scaled(&self, offset: f64) -> f64 {
         let (real, scaled) = self.spans();
-        if real <= 0.0 { 0.0 } else { offset.clamp(0.0, real) / real * scaled }
+        if real <= 0.0 || offset.is_nan() { 0.0 } else { offset.clamp(0.0, real) / real * scaled }
     }
 
     pub fn from_scaled(&self, offset: f64) -> f64 {
         let (real, scaled) = self.spans();
-        if scaled <= 0.0 { 0.0 } else { offset.clamp(0.0, scaled) / scaled * real }
+        if scaled <= 0.0 || offset.is_nan() {
+            0.0
+        } else {
+            offset.clamp(0.0, scaled) / scaled * real
+        }
     }
 }

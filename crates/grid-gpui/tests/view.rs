@@ -294,3 +294,76 @@ fn dragging_a_header_edge_resizes_the_column(cx: &mut TestAppContext) {
     settle(cx);
     assert_eq!(widths(&view, cx)[0], least);
 }
+
+#[ui::test]
+fn dragging_the_scrollbar_crosses_a_million_rows(cx: &mut TestAppContext) {
+    let (view, cx) = open(cx, 1_000_000);
+    let rows = |view: &Entity<GridView>, cx: &mut VisualTestContext| {
+        view.read_with(cx, |view, _| view.visible_rows())
+    };
+    assert_eq!(rows(&view, cx).start, 0);
+    let window = cx.update(|window, _| window.viewport_size());
+    let left = MouseButton::Left;
+    let top = view.read_with(cx, |view, _| view.cell_bounds(0, 0)).unwrap().origin.y;
+    // The thumb starts at the top of the track, just inside the right edge.
+    let grab = point(window.width - px(8.), top + px(10.));
+    cx.simulate_event(MouseMoveEvent { position: grab, ..Default::default() });
+    settle(cx);
+    cx.simulate_event(MouseDownEvent {
+        position: grab,
+        button: left,
+        click_count: 1,
+        ..Default::default()
+    });
+    settle(cx);
+    // Halfway down the track is the middle of the grid, to within a screen or two.
+    let track = window.height - top;
+    let half = point(grab.x, grab.y + (track - px(48.)) / 2.0);
+    cx.simulate_event(MouseMoveEvent {
+        position: half,
+        pressed_button: Some(left),
+        ..Default::default()
+    });
+    settle(cx);
+    let middle = rows(&view, cx).start;
+    assert!((490_000..510_000).contains(&middle), "about the middle: {middle}");
+    // Dragged past the end, the last row is in view and exact.
+    let end = point(grab.x, window.height + px(500.));
+    cx.simulate_event(MouseMoveEvent {
+        position: end,
+        pressed_button: Some(left),
+        ..Default::default()
+    });
+    cx.simulate_event(MouseUpEvent { position: end, button: left, ..Default::default() });
+    settle(cx);
+    assert_eq!(rows(&view, cx).end, 1_000_000);
+    assert_eq!(text(&view, cx, 999_999, 0), "row 999999");
+    // No cell was selected by pressing on the scrollbar.
+    assert_eq!(active(&view, cx), Cell::default());
+}
+
+#[ui::test]
+fn text_seen_a_moment_ago_is_not_shaped_again(cx: &mut TestAppContext) {
+    let (view, cx) = open(cx, 10_000);
+    let counts = |view: &Entity<GridView>, cx: &mut VisualTestContext| {
+        view.read_with(cx, |view, _| view.take_line_counts())
+    };
+    let (_, first) = counts(&view, cx);
+    assert!(first > 0, "the first frame shapes what it shows");
+    let scroll = |cx: &mut VisualTestContext, by: f32| {
+        cx.simulate_event(ScrollEvent {
+            position: point(px(50.), px(100.)),
+            delta: ScrollDelta::Pixels(point(px(0.), px(by))),
+            ..Default::default()
+        });
+        settle(cx);
+    };
+    // Away by many screens, then back to where it began.
+    scroll(cx, -20_000.);
+    let (_, away) = counts(&view, cx);
+    assert!(away > 0);
+    scroll(cx, 20_000.);
+    let (hits, misses) = counts(&view, cx);
+    assert_eq!(misses, 0, "every line on the way back came from the cache");
+    assert!(hits >= first);
+}
