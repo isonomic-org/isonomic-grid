@@ -144,19 +144,27 @@ impl Element for GridElement {
             let mut cells = Vec::with_capacity((rows.len() + 1) * columns.len());
             // Scrolling cells first, pinned ones after, so pinned
             // cells paint over what scrolls beneath them.
+            let right_edge = columns.iter().map(|(_, x, width, _)| x + width).fold(0.0, f32::max);
             for layer in 0..=2 {
                 for (row, y, height, row_pinned) in &rows {
-                    for (column, x, width, column_pinned) in &columns {
+                    let group = state.is_group(*row);
+                    for (position, (column, x, width, column_pinned)) in columns.iter().enumerate()
+                    {
                         if u8::from(*row_pinned) + u8::from(*column_pinned) != layer {
                             continue;
                         }
+                        // A group row is one cell as wide as the grid.
+                        if group && position > 0 {
+                            continue;
+                        }
+                        let width = if group { right_edge - x } else { *width };
                         let cell = Cell { row: *row, column: *column };
                         cells.push(Painted {
-                            bounds: at(*x, *y, *width, *height),
+                            bounds: at(*x, *y, width, *height),
                             text: state.cell_text(*row, *column).replace(['\n', '\r'], " ").into(),
-                            right: state.is_numeric(*column) && !state.is_group(*row),
+                            right: state.is_numeric(*column) && !group,
                             header: *row_pinned || *column_pinned,
-                            selected: state.selection().contains(cell),
+                            selected: !group && state.selection().contains(cell),
                         });
                     }
                 }
@@ -165,7 +173,7 @@ impl Element for GridElement {
                 cells.push(Painted {
                     bounds: at(*x, 0.0, *width, row_height),
                     text: state.header_text(*column).into(),
-                    right: false,
+                    right: state.is_numeric(*column),
                     header: true,
                     selected: false,
                 });

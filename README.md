@@ -4,6 +4,12 @@ The data tables engine for Isonomic apps: typed columns, a query pipeline, layou
 
 A grid shows a **view query** (columns, filter, search, sort, grouping, aggregates, expansion) over a **data source**. The query is plain data, so a saved view, an agent's request and a fetch from a remote source are the same thing. An in-memory table is one source; the engine and remote services are others behind the same trait.
 
+![A grid of 100,000 rows sorted by revenue, with a selected range](docs/images/grid.png)
+
+![The same rows grouped by city](docs/images/grid-grouped.png)
+
+The frames above are the real renderer, run offscreen: `cargo run -p grid-gpui --example screenshot -- grid.png`.
+
 ## Layout
 
 | Crate | Role |
