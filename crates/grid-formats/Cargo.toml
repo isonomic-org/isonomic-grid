@@ -1,0 +1,16 @@
+[package]
+name = "grid-formats"
+description = "Delimited text in and out, and typed parsing of cell text."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+grid-core.workspace = true
+
+[dev-dependencies]
+grid-query.workspace = true
+
+
+[lints]
+workspace = true

@@ -1,0 +1,16 @@
+[package]
+name = "grid-interact"
+description = "Selection, keyboard navigation and the edit log."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+grid-core.workspace = true
+
+[dev-dependencies]
+grid-query.workspace = true
+
+
+[lints]
+workspace = true

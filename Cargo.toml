@@ -1,0 +1,39 @@
+[workspace]
+resolver = "2"
+members = ["crates/*", "xtask"]
+default-members = [
+    "crates/grid-core",
+    "crates/grid-query",
+    "crates/grid-layout",
+    "crates/grid-interact",
+    "crates/grid-formats",
+    "xtask",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+publish = false
+rust-version = "1.90"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive", "rc"] }
+serde_json = "1"
+grid-core = { path = "crates/grid-core" }
+grid-query = { path = "crates/grid-query" }
+grid-layout = { path = "crates/grid-layout" }
+grid-interact = { path = "crates/grid-interact" }
+grid-formats = { path = "crates/grid-formats" }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+dbg_macro = "deny"
+todo = "deny"
+
+[profile.dev]
+debug = 0
+
+[profile.dev.package."*"]
+opt-level = 1

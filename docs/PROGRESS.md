@@ -1,0 +1,11 @@
+# Progress
+
+| Milestone | State |
+|---|---|
+| M0 Foundations | Workspace, rules, checks and CI are in. The drawing spike on macOS and the cross-repository requests are open. |
+| M1 Core grid | Headless half done: data model, in-memory source, filter, search, sort, layout, selection, navigation, edits with undo, delimited formats. View half not started. |
+| M2 Scale | Not started. Packed-key sort and bitmap filters are in; dictionary-encoded text, windowed results and background execution are not. |
+| M3 Grouping and aggregation | Headless grouping, aggregates and expansion are in. Tree data and pivot are not. |
+| M4 Editing and formats | Typed parsing, paste and import are in. Editors and the typed clipboard payload are not. |
+| M5 Integration | Not started. |
+| M6 Hardening | Not started. |
