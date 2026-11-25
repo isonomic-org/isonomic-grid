@@ -2,6 +2,12 @@
 
 Newest first.
 
+## 2026-11-25: the selection is held by row and column ID
+
+- The keyboard and the pointer work in positions; after every change to the selection the state notes the row IDs and column IDs under the active cell and under each range's two corners. After a sort, a filter, a group opening or an edit, it puts the selection back on those rows. This is rule 2, which the view had not been keeping: a sort used to leave the selection on whatever rows landed in the old positions.
+- A range keeps whichever corners still exist; a selection whose rows are all gone falls back to the cell now at the old position. Select-all stays select-all whatever the rows become.
+- `docs/requests.md` lists what this repository needs from the component library and the SDK. None of it has been filed in those repositories yet.
+
 ## 2026-11-25: dragging selects a range
 
 - Pressing on a cell and dragging extends the selection to the cell under the pointer. With the pointer held past an edge the grid scrolls that way, faster the further out it is, and the range grows with every frame until the button is released.

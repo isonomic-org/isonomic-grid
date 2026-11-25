@@ -16,6 +16,7 @@ extern crate ui as gpui;
 mod actions;
 mod edit;
 mod element;
+mod held;
 mod input;
 mod lines;
 mod pointer;
