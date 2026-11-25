@@ -4,6 +4,12 @@ The data tables engine for Isonomic apps: typed columns, a query pipeline, layou
 
 A grid shows a **view query** (columns, filter, search, sort, grouping, aggregates, expansion) over a **data source**. The query is plain data, so a saved view, an agent's request and a fetch from a remote source are the same thing. An in-memory table is one source; the engine and remote services are others behind the same trait.
 
+![A grid of 100,000 rows sorted by revenue, with a selected range](docs/images/grid.png)
+
+![The same rows grouped by city](docs/images/grid-grouped.png)
+
+The frames above are the real renderer, run offscreen: `cargo run -p grid-gpui --example screenshot -- grid.png`.
+
 ## Layout
 
 | Crate | Role |
@@ -37,6 +43,14 @@ let page = source.fetch(&FetchRequest {   // or one window of one group
     query, group_path: vec![Value::text("core")], page: PageRequest::Range(0..50),
 })?;
 ```
+
+## Try it
+
+```sh
+cargo run -p grid-gpui --example playground
+```
+
+Opens the grid in a window. It needs the component library's system dependencies; on Linux those are the usual windowing, font and Vulkan development packages.
 
 ## Develop
 
