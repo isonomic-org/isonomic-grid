@@ -2,6 +2,25 @@
 
 Newest first.
 
+## 2026-11-25: measured on the Intel Mac; the frame budget is not met at the stress size
+
+macOS 15.7 on a 2.6 GHz six-core Intel laptop, native renderer, release build, three runs that agreed to within 0.3 ms. The machine was not idle (load average 7 to 12).
+
+- All 49 tests pass there, and the `screenshot` example renders the plain, grouped and pinned frames.
+- `frames`, 1,950 cells a frame, the grid's share before the renderer:
+
+| | mean | 99th percentile |
+|---|---|---|
+| Scrolling three rows a frame | 8.3 to 8.5 ms | 14 ms |
+| A whole new screen every frame | 8.3 to 8.8 ms | 11 to 15 ms |
+| A screen a frame, back and forth (every line cached) | 6.4 to 6.6 ms | 7 ms |
+
+**What this means.** Milestone 0 asks for under 6 ms at 2,500 cells on this machine. With every line of text already shaped, 1,950 cells take 6.5 ms, about 3.3 µs a cell, which is 8 ms or more at 2,500. The time is the toolkit painting glyphs, one sprite lookup each, roughly 12,000 a frame; this grid's own work (reading cells, layout, the cache) is under a millisecond of it. Nothing left in this repository's code will close that gap.
+
+**What is not decided.** The specification names the fallback: rows kept as retained elements on the optional faster backend. That is a change of rendering path, not a tuning, and it has not been started. A grid of ordinary size is far inside the budget: 400 cells is about 1.5 ms.
+
+**Not measured:** a quiet machine, the renderer's own time, a real display.
+
 ## 2026-11-25: keys for the ends of a column and whole rows and columns
 
 - The command key with an arrow goes to the first or last row of the column or the first or last column of the row; with Shift it extends the range there. Shift with Home or End extends along the row.
@@ -66,7 +85,7 @@ Tested in a headless window with real layout and real events: a 100,000-row grid
 
 **Not yet, and known rough edges.**
 
-1. It has been rendered offscreen with the real renderer on Linux (software Vulkan); the frames are in `docs/images/`, made by the `screenshot` example. The `playground` example opens it in a window; it was run on Linux under a virtual display with software rendering and driven with real pointer and key events (click, type, shortcuts, wheel). On macOS (Intel, macOS 15) every test passes and the `screenshot` example renders its frames with the native renderer; the window itself has not been opened there, and nobody has used it by hand yet.
+1. It has been rendered offscreen with the real renderer on Linux (software Vulkan); the frames are in `docs/images/`, made by the `screenshot` example. The `playground` example opens it in a window; it was run on Linux under a virtual display with software rendering and driven with real pointer and key events (click, type, shortcuts, wheel). On macOS (Intel, macOS 15) every test passes and the `screenshot` example renders its frames with the native renderer. Nobody has used it by hand yet.
 2. Cells edit in place; see the entry above. The editor is one line with a caret and no selection of its own, and there are no pickers for dates or choices yet. A refused paste is reported as an event, which nothing shows yet.
 3. A frame of entirely new text fills in over a few frames; see the entries above.
 4. A column's right edge in the header drags to resize it, down to a minimum width, and the pointer shows it. The standard scrollbars work. Columns move by dragging their titles and fit their contents on a double click of an edge. Pins work from code; the grid has no menu for them, or for hiding columns, yet.

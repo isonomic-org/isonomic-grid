@@ -75,7 +75,7 @@ Budgets are for the Intel test Mac, release build, one million rows unless state
 
 | Measure | Budget | Measured in isolation |
 |---|---|---|
-| Frame time while scrolling, about 2,500 visible cells | under 6 ms; 60 fps held | 5.5 to 6.5 ms at 1,950 cells for the grid's share, before the renderer (`frames` example); 9 to 11 ms on the Intel Mac while it was busy, to be rerun |
+| Frame time while scrolling, about 2,500 visible cells | under 6 ms; 60 fps held | **Not met on the Intel Mac:** 6.5 ms at 1,950 cells with every line cached, 8.4 ms scrolling, for the grid's share before the renderer. 5.5 to 6.5 ms on the Linux machine. See `docs/status.md` |
 | Open 1 million rows by 50 columns (memory) to first frame | under 100 ms after load | n/a |
 | Sort by one numeric key | under 150 ms, off the main thread | 51 ms |
 | Sort by two keys | under 200 ms | 68 ms |
