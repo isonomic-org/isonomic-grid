@@ -3,14 +3,14 @@
 
 use std::ops::Range;
 
-use grid_interact::Move;
+use grid_interact::{LineEdit, Move};
 use grid_layout::Hit;
 use ui::base::Scrollbar;
 use ui::component::ActiveTheme as _;
 use ui::{
-    App, Bounds, ClipboardItem, Context, Entity, EntityInputHandler, FocusHandle, Focusable,
-    InteractiveElement as _, IntoElement, MouseButton, ParentElement as _, Pixels, Point, Render,
-    Styled as _, Subscription, UTF16Selection, Window, div, point, px, size,
+    App, Bounds, ClipboardItem, Context, Entity, FocusHandle, Focusable, InteractiveElement as _,
+    IntoElement, MouseButton, ParentElement as _, Pixels, Point, Render, Styled as _, Subscription,
+    Window, div, point, px, size,
 };
 
 use crate::actions::*;
@@ -25,6 +25,8 @@ pub struct GridView {
     pub(crate) focus: FocusHandle,
     pub(crate) frame: SharedFrame,
     pub(crate) resize: Option<Resize>,
+    /// Whether the pointer is over a column edge it could drag.
+    pub(crate) over_edge: bool,
     scroll: GridScrollHandle,
     _observe: Subscription,
 }
@@ -37,6 +39,7 @@ impl GridView {
             focus: cx.focus_handle(),
             frame: SharedFrame::default(),
             resize: None,
+            over_edge: false,
             scroll: GridScrollHandle::default(),
             _observe: observe,
         }
@@ -117,6 +120,19 @@ impl GridView {
 
     /// Moves the selection and scrolls it into view.
     pub(crate) fn go(&mut self, step: Move, extend: bool, cx: &mut Context<Self>) {
+        // In an edit begun from the cell's own text, the keys that
+        // move along a row move the caret along the line instead.
+        let amending = self.state.read(cx).editing().is_some_and(|editing| editing.amend);
+        let along: Option<fn(&mut LineEdit)> = match step {
+            Move::Left => Some(LineEdit::move_left),
+            Move::Right => Some(LineEdit::move_right),
+            Move::Home => Some(LineEdit::move_to_start),
+            Move::End => Some(LineEdit::move_to_end),
+            _ => None,
+        };
+        if let (true, false, Some(along)) = (amending, extend, along) {
+            return self.state.update(cx, |state, cx| state.edit_line(along, cx));
+        }
         // Moving away from a cell being edited commits it first.
         if !self.state.update(cx, |state, cx| state.commit_edit(cx)) {
             return;
@@ -160,6 +176,7 @@ impl Render for GridView {
             state: self.state.clone(),
             frame: self.frame.clone(),
             scroll: self.scroll.clone(),
+            resizing: self.over_edge || self.resize.is_some(),
             colors,
         };
         let header = px(self.frame.borrow().layout.as_ref().map_or(0.0, |layout| layout.header));
@@ -226,12 +243,36 @@ impl Render for GridView {
             }))
             .on_action(cx.listener(|this, _: &Backspace, _, cx| {
                 this.state.update(cx, |state, cx| match state.editing() {
-                    Some(_) => state.edit_backspace(cx),
+                    Some(_) => state.edit_line(|line| _ = line.backspace(), cx),
                     None => state.begin_edit(Some(""), cx),
                 });
             }))
             .on_action(cx.listener(|this, _: &ClearCell, _, cx| {
-                this.state.update(cx, |state, cx| state.clear_cell(cx));
+                this.state.update(cx, |state, cx| match state.editing() {
+                    Some(_) => state.edit_line(|line| _ = line.delete(), cx),
+                    None => state.clear_selection(cx),
+                });
+            }))
+            .on_action(cx.listener(|this, _: &Cut, _, cx| {
+                if this.state.read(cx).editing().is_some() {
+                    return;
+                }
+                let text = this.state.update(cx, |state, _| state.copy_text());
+                cx.write_to_clipboard(ClipboardItem::new_string(text));
+                this.state.update(cx, |state, cx| state.clear_selection(cx));
+            }))
+            .on_action(cx.listener(|this, _: &Paste, _, cx| {
+                let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) else {
+                    return;
+                };
+                this.state.update(cx, |state, cx| match state.editing() {
+                    // Into a cell being edited goes the first line only.
+                    Some(_) => {
+                        let line = text.lines().next().unwrap_or_default().replace('\t', " ");
+                        state.edit_line(|edit| edit.insert(&line), cx);
+                    }
+                    None => state.paste_text(&text, cx),
+                });
             }))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::mouse_down))
             .on_scroll(cx.listener(Self::scroll))
@@ -254,79 +295,5 @@ impl Render for GridView {
                     .h(bar)
                     .child(Scrollbar::horizontal(&self.scroll).viewport_from_layout()),
             )
-    }
-}
-
-/// Typing starts an edit of the active cell, or adds to the one in
-/// progress. Composition is not supported yet: composed text arrives
-/// as it is committed.
-impl EntityInputHandler for GridView {
-    fn text_for_range(
-        &mut self,
-        _: Range<usize>,
-        _: &mut Option<Range<usize>>,
-        _: &mut Window,
-        _: &mut Context<Self>,
-    ) -> Option<String> {
-        None
-    }
-
-    fn selected_text_range(
-        &mut self,
-        _: bool,
-        _: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Option<UTF16Selection> {
-        let at = self.state.read(cx).editing().map_or(0, |e| e.text.encode_utf16().count());
-        Some(UTF16Selection { range: at..at, reversed: false })
-    }
-
-    fn marked_text_range(&self, _: &mut Window, _: &mut Context<Self>) -> Option<Range<usize>> {
-        None
-    }
-
-    fn unmark_text(&mut self, _: &mut Window, _: &mut Context<Self>) {}
-
-    fn replace_text_in_range(
-        &mut self,
-        _: Option<Range<usize>>,
-        text: &str,
-        _: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.state.update(cx, |state, cx| match state.editing() {
-            Some(_) => state.edit_insert(text, cx),
-            None => state.begin_edit(Some(text), cx),
-        });
-    }
-
-    fn replace_and_mark_text_in_range(
-        &mut self,
-        _: Option<Range<usize>>,
-        _: &str,
-        _: Option<Range<usize>>,
-        _: &mut Window,
-        _: &mut Context<Self>,
-    ) {
-    }
-
-    fn bounds_for_range(
-        &mut self,
-        _: Range<usize>,
-        _: Bounds<Pixels>,
-        _: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Option<Bounds<Pixels>> {
-        let active = self.state.read(cx).selection().active;
-        self.cell_bounds(active.row, active.column)
-    }
-
-    fn character_index_for_point(
-        &mut self,
-        _: Point<Pixels>,
-        _: &mut Window,
-        _: &mut Context<Self>,
-    ) -> Option<usize> {
-        None
     }
 }

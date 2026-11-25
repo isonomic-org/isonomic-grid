@@ -4,14 +4,15 @@
 use std::rc::Rc;
 
 use grid_core::{
-    ColumnId, ColumnSpec, ColumnType, Direction, Edit, Expansion, RowId, SortKey, Table, Value,
-    ViewQuery,
+    ColumnId, ColumnSpec, ColumnType, Direction, Expansion, RowId, SortKey, Table, Value, ViewQuery,
 };
-use grid_formats::{format_value, parse_value, write_delimited};
+use grid_formats::format_value;
 use grid_interact::{Cell, EditLog, Move, Selection};
 use grid_layout::Pins;
 use grid_query::{MemorySource, ViewResult, ViewRow};
 use ui::{Context, EventEmitter};
+
+use crate::edit::Editing;
 
 /// A column's starting width, in rems.
 const COLUMN_REMS: f32 = 10.0;
@@ -25,28 +26,21 @@ pub enum GridEvent {
     /// The rows shown changed: an edit, or a new query.
     Changed,
     SelectionChanged,
-}
-
-/// A cell being edited: the text typed so far, and why the last
-/// attempt to commit it was refused.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Editing {
-    pub cell: Cell,
-    pub text: String,
-    pub error: Option<String>,
+    /// A paste or an edit was refused, and why. Nothing was changed.
+    Refused(String),
 }
 
 /// One grid: its data, what it shows of it, and where the user is.
 pub struct GridState {
-    source: MemorySource,
+    pub(crate) source: MemorySource,
     query: ViewQuery,
     /// Visible columns, as indices into the source's schema.
-    columns: Vec<usize>,
+    pub(crate) columns: Vec<usize>,
     /// Width of each visible column, in rems.
     widths: Vec<f32>,
-    selection: Selection,
-    editing: Option<Editing>,
-    log: EditLog,
+    pub(crate) selection: Selection,
+    pub(crate) editing: Option<Editing>,
+    pub(crate) log: EditLog,
     pub(crate) scroll: (f64, f64),
     pub(crate) row_pins: Pins,
     pub(crate) column_pins: Pins,
@@ -102,7 +96,7 @@ impl GridState {
         self.result().rows.len()
     }
 
-    fn spec(&self, column: usize) -> Option<&ColumnSpec> {
+    pub(crate) fn spec(&self, column: usize) -> Option<&ColumnSpec> {
         self.table().specs().get(*self.columns.get(column)?)
     }
 
@@ -160,7 +154,7 @@ impl GridState {
         }
     }
 
-    fn changed(&mut self, cx: &mut Context<Self>) {
+    pub(crate) fn changed(&mut self, cx: &mut Context<Self>) {
         let (rows, columns) = (self.row_count(), self.column_count());
         let clamp = |cell: Cell| Cell {
             row: cell.row.min(rows.saturating_sub(1)),
@@ -270,87 +264,6 @@ impl GridState {
         }
     }
 
-    /// Sets a cell from typed text. An error says why the text is not
-    /// a value of the column's type, or why the source refused it.
-    pub fn set_cell_text(
-        &mut self,
-        row: usize,
-        column: usize,
-        text: &str,
-        cx: &mut Context<Self>,
-    ) -> Result<(), String> {
-        let id = self.row_id(row).ok_or("not a data row")?;
-        let spec = self.spec(column).ok_or("no such column")?.clone();
-        let value = parse_value(text, &spec).map_err(|error| error.to_string())?;
-        let edit = Edit::SetCell { row: id, column: spec.id, value };
-        self.log.apply(&mut self.source, &[edit]).map_err(|error| error.to_string())?;
-        self.changed(cx);
-        Ok(())
-    }
-
-    pub fn editing(&self) -> Option<&Editing> {
-        self.editing.as_ref()
-    }
-
-    /// Starts editing the active cell. `replace` is what the user
-    /// typed to start; without it the cell's text is kept to amend.
-    pub fn begin_edit(&mut self, replace: Option<&str>, cx: &mut Context<Self>) {
-        let cell = self.selection.active;
-        let editable = self.spec(cell.column).is_some_and(|spec| spec.editable);
-        if self.editing.is_some() || !editable || self.row_id(cell.row).is_none() {
-            return;
-        }
-        let text = replace.map_or_else(|| self.cell_text(cell.row, cell.column), str::to_owned);
-        self.editing = Some(Editing { cell, text, error: None });
-        cx.notify();
-    }
-
-    /// Types into the cell being edited.
-    pub fn edit_insert(&mut self, text: &str, cx: &mut Context<Self>) {
-        if let Some(editing) = &mut self.editing {
-            editing.text.push_str(text);
-            editing.error = None;
-            cx.notify();
-        }
-    }
-
-    /// Removes the last character typed.
-    pub fn edit_backspace(&mut self, cx: &mut Context<Self>) {
-        if let Some(editing) = &mut self.editing {
-            editing.text.pop();
-            editing.error = None;
-            cx.notify();
-        }
-    }
-
-    pub fn cancel_edit(&mut self, cx: &mut Context<Self>) {
-        if self.editing.take().is_some() {
-            cx.notify();
-        }
-    }
-
-    /// Writes the edited text to its cell. On a refusal the editor
-    /// stays open and carries the reason. `true` when nothing is
-    /// left being edited.
-    pub fn commit_edit(&mut self, cx: &mut Context<Self>) -> bool {
-        let Some(editing) = self.editing.take() else { return true };
-        let Cell { row, column } = editing.cell;
-        match self.set_cell_text(row, column, &editing.text, cx) {
-            Ok(()) => true,
-            Err(error) => {
-                self.editing = Some(Editing { error: Some(error), ..editing });
-                cx.notify();
-                false
-            }
-        }
-    }
-
-    /// Empties the active cell.
-    pub fn clear_cell(&mut self, cx: &mut Context<Self>) {
-        let cell = self.selection.active;
-        let _ = self.set_cell_text(cell.row, cell.column, "", cx);
-    }
-
     pub fn undo(&mut self, cx: &mut Context<Self>) {
         if matches!(self.log.undo(&mut self.source), Ok(Some(_))) {
             self.changed(cx);
@@ -361,18 +274,5 @@ impl GridState {
         if matches!(self.log.redo(&mut self.source), Ok(Some(_))) {
             self.changed(cx);
         }
-    }
-
-    /// The last selected range as tab-separated text.
-    pub fn copy_text(&mut self) -> String {
-        let Some(range) = self.selection.ranges.last().copied() else { return String::new() };
-        let ((top, bottom), (left, right)) = (range.rows(), range.columns());
-        let bottom = bottom.min(self.row_count().saturating_sub(1));
-        let mut lines = Vec::new();
-        for row in top..=bottom {
-            lines
-                .push((left..=right).map(|column| self.cell_text(row, column)).collect::<Vec<_>>());
-        }
-        write_delimited(lines, '\t')
     }
 }

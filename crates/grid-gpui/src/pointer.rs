@@ -43,7 +43,15 @@ impl GridView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let Some(resize) = &self.resize else { return };
+        let Some(resize) = &self.resize else {
+            // Nothing is being dragged: show whether an edge could be.
+            let over = self.edge_at(event.position, window).is_some();
+            if over != self.over_edge {
+                self.over_edge = over;
+                cx.notify();
+            }
+            return;
+        };
         if event.pressed_button != Some(MouseButton::Left) {
             self.resize = None;
             return;
@@ -81,6 +89,9 @@ impl GridView {
                     state.toggle_group(row, cx);
                 } else {
                     state.click(Cell { row, column }, extend, add, cx);
+                    if event.click_count == 2 && !extend && !add {
+                        state.begin_edit(None, cx);
+                    }
                 }
             }),
             Hit::Outside => {}
