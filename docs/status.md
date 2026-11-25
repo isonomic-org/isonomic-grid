@@ -7,6 +7,7 @@ Newest first.
 - The command key with an arrow goes to the first or last row of the column or the first or last column of the row; with Shift it extends the range there. Shift with Home or End extends along the row.
 - Shift with Space selects the active cell's row, Control with Space its column; in a cell being edited they type a space.
 - `docs/keys.md` lists every key and what the pointer does.
+- A test presses every key, clicks inside and outside, and calls every column and pin function on a grid with no rows, with and without columns. It found one thing: a paste into a grid with no columns added empty rows; it now does nothing.
 
 ## 2026-11-25: columns move, hide, pin and fit
 
