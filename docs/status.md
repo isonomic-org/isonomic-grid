@@ -2,6 +2,13 @@
 
 Newest first.
 
+## 2026-11-25: columns move, hide, pin and fit
+
+- A press on a column's title that becomes a drag moves the column, live, to wherever the pointer is; a press that does not still sorts. `move_column`, `hide_column` and `show_column` do the same from code, and the selection, held by column ID, goes with its columns.
+- `pin_columns` and `pin_rows` pin any number at each end. Pinned cells are drawn over what scrolls beneath them, with a line along the band's inner edge, and the active cell's outline is cut off where it passes under one. `docs/images/grid-pinned.png` is a rendered frame. There is no control in the grid itself for pinning yet; it is the host's to call.
+- A double click on a column's edge sizes it to the widest text it shows now, its title included.
+- Found and fixed on the way: with a pinned column, the titles of scrolled columns were painted over the pinned column's title, and every pinned cell was drawn in the title color.
+
 ## 2026-11-25: the selection is held by row and column ID
 
 - The keyboard and the pointer work in positions; after every change to the selection the state notes the row IDs and column IDs under the active cell and under each range's two corners. After a sort, a filter, a group opening or an edit, it puts the selection back on those rows. This is rule 2, which the view had not been keeping: a sort used to leave the selection on whatever rows landed in the old positions.
@@ -55,7 +62,7 @@ Tested in a headless window with real layout and real events: a 100,000-row grid
 1. It has been rendered offscreen with the real renderer on Linux (software Vulkan); the frames are in `docs/images/`, made by the `screenshot` example. The `playground` example opens it in a window; it was run on Linux under a virtual display with software rendering and driven with real pointer and key events (click, type, shortcuts, wheel). On macOS (Intel, macOS 15) every test passes and the `screenshot` example renders its frames with the native renderer; the window itself has not been opened there, and nobody has used it by hand yet.
 2. Cells edit in place; see the entry above. The editor is one line with a caret and no selection of its own, and there are no pickers for dates or choices yet. A refused paste is reported as an event, which nothing shows yet.
 3. A frame of entirely new text fills in over a few frames; see the entries above.
-4. A column's right edge in the header drags to resize it, down to a minimum width, and the pointer shows it. The standard scrollbars work. There is no column reorder and there are no pin controls, though the layout crate already supports pins.
+4. A column's right edge in the header drags to resize it, down to a minimum width, and the pointer shows it. The standard scrollbars work. Columns move by dragging their titles and fit their contents on a double click of an edge. Pins work from code; the grid has no menu for them, or for hiding columns, yet.
 5. The view takes the in-memory source only; windowed sources come with the engine integration.
 6. No semantic shadow for assistive technology yet.
 

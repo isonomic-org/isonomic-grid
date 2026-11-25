@@ -4,7 +4,7 @@
 //! Renders the grid offscreen with the real renderer and saves a PNG.
 //! Needs a GPU or a software Vulkan driver.
 //!
-//! `cargo run -p grid-gpui --example screenshot -- grid.png [grouped]`
+//! `cargo run -p grid-gpui --example screenshot -- grid.png [grouped|pinned]`
 
 extern crate ui as gpui;
 
@@ -72,7 +72,8 @@ impl Render for Host {
 
 fn main() -> ExitCode {
     let out = std::env::args().nth(1).unwrap_or_else(|| "grid.png".to_owned());
-    let grouped = std::env::args().nth(2).is_some();
+    let mode = std::env::args().nth(2).unwrap_or_default();
+    let (grouped, pinned) = (mode == "grouped", mode == "pinned");
     let mut cx = HeadlessAppContext::with_platform(
         ui::platform::current_platform(true).text_system(),
         Arc::new(Assets),
@@ -98,6 +99,16 @@ fn main() -> ExitCode {
                 if grouped {
                     state.group_by(vec![ColumnId::new("city")], cx);
                     state.toggle_group(1, cx);
+                } else if pinned {
+                    // The first column and the first and last rows stay
+                    // put; the rest is scrolled under them.
+                    for column in 1..6 {
+                        state.set_width(column, 16.0, cx);
+                    }
+                    state.pin_columns(1, 0, cx);
+                    state.pin_rows(1, 1, cx);
+                    state.scroll_to(250.0, 1_000.0, cx);
+                    state.click(Cell { row: 33, column: 2 }, false, false, cx);
                 } else {
                     // Revenue, highest first; then a selected range.
                     state.sort_by(3, cx);

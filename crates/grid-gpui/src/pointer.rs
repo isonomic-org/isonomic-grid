@@ -7,10 +7,11 @@
 use grid_interact::Cell;
 use grid_layout::{Hit, Viewport};
 use ui::{
-    Context, MouseButton, MouseDownEvent, MouseMoveEvent, Pixels, Point, ScrollEvent, Window,
-    point, px,
+    Context, MouseButton, MouseDownEvent, MouseMoveEvent, Pixels, Point, ScrollEvent, TextRun,
+    Window, point, px,
 };
 
+use crate::element::PADDING_REMS;
 use crate::view::GridView;
 
 /// How close to a column's right edge, in rems, a press in the header
@@ -20,6 +21,11 @@ const GRIP_REMS: f32 = 0.3125;
 /// The most rows one frame scrolls while a drag holds the pointer past
 /// an edge.
 const MOST_ROWS_A_FRAME: f32 = 8.;
+/// How far the pointer travels on a header, in rems, before a press
+/// becomes a drag that moves the column.
+const DRAG_SLACK_REMS: f32 = 0.5;
+/// Room left beside the widest text when a column is fitted, in rems.
+const FIT_SLACK_REMS: f32 = 0.25;
 
 /// What the pressed pointer is doing.
 pub(crate) enum Drag {
@@ -32,6 +38,10 @@ pub(crate) enum Drag {
     },
     /// Dragging out a range of cells; the pointer was last here.
     Select { at: Point<Pixels> },
+    /// Pressed on a column's header: a click sorts by it, a drag moves
+    /// it. `moved` is set once the pointer has gone far enough to be a
+    /// drag.
+    Column { column: usize, from: Pixels, moved: bool },
 }
 
 impl GridView {
@@ -72,6 +82,17 @@ impl GridView {
             Some(Drag::Select { .. }) => {
                 self.drag = Some(Drag::Select { at: event.position });
                 self.drag_select(cx);
+            }
+            Some(Drag::Column { column, from, moved }) => {
+                let slack = window.rem_size() * DRAG_SLACK_REMS;
+                let moved = moved || (event.position.x - from).abs() > slack;
+                // The column goes where the pointer is, as it moves.
+                let over = match self.hit(point(event.position.x, self.frame.borrow().origin.y)) {
+                    Hit::Header { column: over } if moved => over,
+                    _ => column,
+                };
+                self.state.update(cx, |state, cx| state.move_column(column, over, cx));
+                self.drag = Some(Drag::Column { column: over, from, moved });
             }
         }
     }
@@ -127,9 +148,41 @@ impl GridView {
         self.autoscroll = moved;
     }
 
-    pub(crate) fn mouse_up(&mut self) {
+    pub(crate) fn mouse_up(&mut self, cx: &mut Context<Self>) {
+        // A press on a header that never became a drag sorts by it.
+        if let Some(Drag::Column { column, moved: false, .. }) = self.drag {
+            self.state.update(cx, |state, cx| state.sort_by(column, cx));
+        }
         self.drag = None;
         self.autoscroll = false;
+    }
+
+    /// Sizes a column to the widest text it shows now, its title
+    /// included.
+    fn fit_column(&mut self, column: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(face) = self.frame.borrow().lines.face().cloned() else { return };
+        let rows = self.visible_rows();
+        let texts: Vec<String> = self.state.update(cx, |state, _| {
+            let mut texts = vec![state.header_text(column)];
+            texts.extend(rows.map(|row| state.cell_text(row, column)));
+            texts
+        });
+        let widest =
+            texts.into_iter().filter(|text| !text.is_empty()).fold(px(0.), |widest, text| {
+                let run = TextRun {
+                    len: text.len(),
+                    font: face.font.clone(),
+                    color: face.text,
+                    background_color: None,
+                    underline: None,
+                    strikethrough: None,
+                };
+                let line = window.text_system().shape_line(text.into(), face.size, &[run], None);
+                widest.max(line.width)
+            });
+        let rem = window.rem_size();
+        let rems = f32::from(widest) / f32::from(rem) + PADDING_REMS * 2.0 + FIT_SLACK_REMS;
+        self.state.update(cx, |state, cx| state.set_width(column, rems, cx));
     }
 
     pub(crate) fn mouse_down(
@@ -143,13 +196,18 @@ impl GridView {
             return;
         }
         if let Some(column) = self.edge_at(event.position, window) {
+            if event.click_count == 2 {
+                return self.fit_column(column, window, cx);
+            }
             let width = self.state.read(cx).widths().get(column).copied().unwrap_or_default();
             self.drag = Some(Drag::Resize { column, from: event.position.x, width });
             return;
         }
         let (extend, add) = (event.modifiers.shift, event.modifiers.secondary(cx));
         match self.hit(event.position) {
-            Hit::Header { column } => self.state.update(cx, |state, cx| state.sort_by(column, cx)),
+            Hit::Header { column } => {
+                self.drag = Some(Drag::Column { column, from: event.position.x, moved: false });
+            }
             Hit::Cell { row, column } => {
                 let group = self.state.update(cx, |state, cx| {
                     if state.is_group(row) {
