@@ -2,6 +2,12 @@
 
 Newest first.
 
+## 2026-11-25: a frame shapes only so much new text
+
+- One frame shapes at most 256 lines of text it has never seen. A jump to rows never shown draws what it can, leaves the other cells empty, and fills them in over the next frames. On the same machine and run as the table below, a whole new screen every frame went from 19.7 ms to 5.4 ms a frame; steady scrolling is unchanged.
+- The view counts the most lines any one frame shaped, and a test holds it to the limit.
+- On the Intel Mac (2.6 GHz, six cores) the `frames` example ran, but while the machine was busy with other builds (load average above 13): 9 to 11 ms a frame scrolling three rows, before this change. That is not a clean number; it needs a rerun on a quiet machine before it says anything about the 6 ms budget.
+
 ## 2026-11-25: the cell editor has a caret; paste, cut and range clear
 
 - The line being edited is a headless type in `grid-interact`: text, a caret and the part an input method is composing, with offsets that never split a character.
@@ -23,7 +29,7 @@ Newest first.
 | A whole new screen every frame | 19.7 ms | 28.9 ms | 58.7% |
 | A screen a frame, back and forth | 5.5 ms | 12.2 ms | 99.7% |
 
-Before these changes the first line was 7.5 ms. Of what remains, about 3.3 ms is the toolkit painting glyphs, one sprite lookup each; a whole new screen adds about 4.5 ms of shaping text never seen before. Neither has been measured on macOS yet.
+Before these changes the first line was 7.5 ms. Of what remains, about 3.3 ms is the toolkit painting glyphs, one sprite lookup each; a whole new screen adds about 4.5 ms of shaping text never seen before. See the entry above for the first, unclean, macOS run.
 
 ## 2026-11-25: the grid draws and takes input
 
@@ -38,7 +44,7 @@ Tested in a headless window with real layout and real events: a 100,000-row grid
 
 1. It has been rendered offscreen with the real renderer on Linux (software Vulkan); the frames are in `docs/images/`, made by the `screenshot` example. The `playground` example opens it in a window; it was run on Linux under a virtual display with software rendering and driven with real pointer and key events (click, type, shortcuts, wheel). On macOS (Intel, macOS 15) every test passes and the `screenshot` example renders its frames with the native renderer; the window itself has not been opened there, and nobody has used it by hand yet.
 2. Cells edit in place; see the entry above. The editor is one line with a caret and no selection of its own, and there are no pickers for dates or choices yet. A refused paste is reported as an event, which nothing shows yet.
-3. A frame of entirely new text still shapes every cell; see the timings above.
+3. A frame of entirely new text fills in over a few frames; see the entries above.
 4. A column's right edge in the header drags to resize it, down to a minimum width, and the pointer shows it. The standard scrollbars work. There is no column reorder and there are no pin controls, though the layout crate already supports pins.
 5. The view takes the in-memory source only; windowed sources come with the engine integration.
 6. No semantic shadow for assistive technology yet.
