@@ -148,7 +148,8 @@ fn a_line_edits_between_characters_only() {
     assert_eq!(line.caret(), 1);
     line.replace(Some(2..usize::MAX), "b", false);
     assert_eq!(line.text(), "ab");
-    line.replace(Some(9..3), "c", false);
+    let backwards = std::ops::Range { start: 9, end: 3 };
+    line.replace(Some(backwards), "c", false);
     assert_eq!(line.text(), "abc");
 }
 

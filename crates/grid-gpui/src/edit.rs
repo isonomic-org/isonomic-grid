@@ -114,14 +114,12 @@ impl GridState {
         }
     }
 
-    /// The data rows of a range, with their positions, and its columns.
-    fn targets(&mut self, range: CellRange) -> (Vec<(usize, RowId)>, Vec<(usize, ColumnSpec)>) {
+    /// The data rows of a range, and its columns.
+    fn targets(&mut self, range: CellRange) -> (Vec<RowId>, Vec<ColumnSpec>) {
         let ((top, bottom), (left, right)) = (range.rows(), range.columns());
         let bottom = bottom.min(self.row_count().saturating_sub(1));
-        let rows = (top..=bottom).filter_map(|row| Some((row, self.row_id(row)?))).collect();
-        let columns = (left..=right)
-            .filter_map(|column| Some((column, self.spec(column)?.clone())))
-            .collect();
+        let rows = (top..=bottom).filter_map(|row| self.row_id(row)).collect();
+        let columns = (left..=right).filter_map(|column| self.spec(column).cloned()).collect();
         (rows, columns)
     }
 
@@ -135,8 +133,8 @@ impl GridState {
         let mut edits = Vec::new();
         for range in ranges {
             let (rows, columns) = self.targets(range);
-            for (_, row) in &rows {
-                for (_, spec) in columns.iter().filter(|(_, spec)| spec.editable) {
+            for row in &rows {
+                for spec in columns.iter().filter(|spec| spec.editable) {
                     let (row, column) = (*row, spec.id.clone());
                     edits.push(Edit::SetCell { row, column, value: Value::Null });
                 }
@@ -188,8 +186,7 @@ impl GridState {
         if range.cell_count() > MOST_CELLS {
             return self.refuse(format!("{} cells is too many to paste", range.cell_count()), cx);
         }
-        let (rows, columns) = self.targets(range);
-        let mut rows: Vec<RowId> = rows.into_iter().map(|(_, id)| id).collect();
+        let (mut rows, columns) = self.targets(range);
         if fill {
             fields = vec![vec![fields[0][0].clone(); columns.len()]; rows.len()];
         } else {
@@ -202,7 +199,6 @@ impl GridState {
                 next += 1;
             }
         }
-        let columns: Vec<ColumnSpec> = columns.into_iter().map(|(_, spec)| spec).collect();
         let all = self.table().specs().to_vec();
         let pasted = paste_edits(&fields, &rows, &columns, &all)
             .map_err(|error| error.to_string())
