@@ -1,3 +1,6 @@
+// Copyright 2026 Anud Inc.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 use grid_core::{Change, DataSource, Edit, SourceError};
 
 /// The edits that take a batch of changes back, newest first.

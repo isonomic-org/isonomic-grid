@@ -1,3 +1,6 @@
+// Copyright 2026 Anud Inc.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 //! Interaction state for a grid, with no drawing: the active cell and
 //! selected ranges, keyboard navigation, row selection that scales to
 //! windowed sources, and an edit log for undo and redo.

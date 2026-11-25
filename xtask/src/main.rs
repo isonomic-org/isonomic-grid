@@ -1,3 +1,6 @@
+// Copyright 2026 Anud Inc.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 //! Repository checks. Run with `cargo xtask <command>`.
 //!
 //! - `deps`: headless crates depend only on what the allow-list names.

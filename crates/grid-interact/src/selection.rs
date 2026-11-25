@@ -1,3 +1,6 @@
+// Copyright 2026 Anud Inc.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 /// A cell by its position in the view: row in the flattened result,
 /// column among the visible columns.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]

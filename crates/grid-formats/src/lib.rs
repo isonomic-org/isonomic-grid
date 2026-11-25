@@ -1,3 +1,6 @@
+// Copyright 2026 Anud Inc.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 //! Delimited text in and out, and typed parsing of cell text.
 //!
 //! The clipboard carries tab-separated text so any spreadsheet can

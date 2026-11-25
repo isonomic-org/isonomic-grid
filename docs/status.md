@@ -2,6 +2,10 @@
 
 Newest first.
 
+## 2026-11-25: licence
+
+The repository is licensed under GPL-3.0-or-later: LICENSE at the root, the licence field in every manifest, and the copyright and SPDX lines at the top of every Rust source file. SECURITY.md says how to report a vulnerability. No behaviour changed.
+
 ## 2026-11-25: version 0.1, the headless engine
 
 **What exists.** Five headless crates, tested, with no GPU or window needed.

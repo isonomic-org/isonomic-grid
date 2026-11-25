@@ -4,6 +4,7 @@ description = "Delimited text in and out, and typed parsing of cell text."
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [dependencies]
 grid-core.workspace = true

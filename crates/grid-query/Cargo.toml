@@ -4,6 +4,7 @@ description = "The query pipeline: filter, search, sort, group, aggregate, flatt
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [dependencies]
 grid-core.workspace = true

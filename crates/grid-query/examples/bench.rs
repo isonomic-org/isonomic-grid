@@ -1,3 +1,6 @@
+// Copyright 2026 Anud Inc.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 //! Rough timings for the query pipeline. Run with
 //! `cargo run --release -p grid-query --example bench -- 1000000`.
 

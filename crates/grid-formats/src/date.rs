@@ -1,3 +1,6 @@
+// Copyright 2026 Anud Inc.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 //! Calendar arithmetic for the proleptic Gregorian calendar, in UTC.
 
 const MICROS_PER_DAY: i64 = 86_400_000_000;

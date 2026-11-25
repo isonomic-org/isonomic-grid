@@ -1,3 +1,6 @@
+// Copyright 2026 Anud Inc.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 /// Reads delimited text into rows of fields. Quoted fields may hold
 /// the delimiter, quotes (doubled) and line breaks. Any input is
 /// accepted; a quote left open runs to the end.

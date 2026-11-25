@@ -4,6 +4,7 @@ description = "Values, typed columns, the columnar table, the view query and the
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [dependencies]
 serde.workspace = true
