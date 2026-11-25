@@ -10,9 +10,9 @@ use std::rc::Rc;
 use grid_interact::Cell;
 use grid_layout::{Axis, Band, GridLayout, Viewport};
 use ui::{
-    App, Bounds, ContentMask, Element, ElementId, Entity, GlobalElementId, Hsla,
-    InspectorElementId, IntoElement, LayoutId, Pixels, Point, SharedString, Style, TextAlign,
-    TextRun, Window, fill, point, px, relative, size,
+    App, Bounds, ContentMask, DispatchPhase, Element, ElementId, Entity, GlobalElementId, Hsla,
+    InspectorElementId, IntoElement, LayoutId, MouseMoveEvent, MouseUpEvent, Pixels, Point,
+    SharedString, Style, TextAlign, TextRun, Window, fill, point, px, relative, size,
 };
 
 use crate::state::GridState;
@@ -223,6 +223,20 @@ impl Element for GridElement {
         let font_size = style.font_size.to_pixels(window.rem_size());
         let line_height = window.line_height();
         let padding = window.rem_size() * PADDING_REMS;
+        // A drag of a column edge follows the pointer wherever it goes,
+        // so the view hears every move and release in the window.
+        let view = self.view.clone();
+        window.on_mouse_event(move |event: &MouseMoveEvent, phase, window, cx| {
+            if phase == DispatchPhase::Bubble {
+                view.update(cx, |view, cx| view.mouse_move(event, window, cx));
+            }
+        });
+        let view = self.view.clone();
+        window.on_mouse_event(move |_: &MouseUpEvent, phase, _, cx| {
+            if phase == DispatchPhase::Bubble {
+                view.update(cx, |view, _| view.mouse_up());
+            }
+        });
         window.with_content_mask(Some(ContentMask { bounds }), |window| {
             window.paint_quad(fill(bounds, colors.background));
             for cell in cells.iter() {

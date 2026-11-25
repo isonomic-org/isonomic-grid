@@ -15,6 +15,8 @@ use ui::{Context, EventEmitter};
 
 /// A column's starting width, in rems.
 const COLUMN_REMS: f32 = 10.0;
+/// The narrowest a column can be dragged, in rems.
+const MIN_COLUMN_REMS: f32 = 2.0;
 const UNDO_STEPS: usize = 200;
 
 /// What a [`GridState`] tells its observers.
@@ -243,6 +245,21 @@ impl GridState {
         self.selection.select_all(rows, columns);
         cx.emit(GridEvent::SelectionChanged);
         cx.notify();
+    }
+
+    /// Sets a visible column's width in rems, no narrower than the
+    /// minimum. Unknown columns and widths that are not numbers are
+    /// ignored.
+    pub fn set_width(&mut self, column: usize, rems: f32, cx: &mut Context<Self>) {
+        let Some(width) = self.widths.get_mut(column) else { return };
+        if !rems.is_finite() {
+            return;
+        }
+        let rems = rems.max(MIN_COLUMN_REMS);
+        if *width != rems {
+            *width = rems;
+            cx.notify();
+        }
     }
 
     pub fn scroll_to(&mut self, x: f64, y: f64, cx: &mut Context<Self>) {

@@ -10,8 +10,9 @@ use grid_core::{ColumnId, ColumnSpec, ColumnType, Table, Value};
 use grid_gpui::{GridState, GridView};
 use grid_interact::{Cell, Selection};
 use ui::{
-    AppContext as _, Entity, Focusable as _, Modifiers, ScrollDelta, ScrollEvent, TestAppContext,
-    VisualTestContext, point, px,
+    AppContext as _, Entity, Focusable as _, Modifiers, MouseButton, MouseDownEvent,
+    MouseMoveEvent, MouseUpEvent, ScrollDelta, ScrollEvent, TestAppContext, VisualTestContext,
+    point, px,
 };
 
 fn table(rows: usize) -> Table {
@@ -231,4 +232,65 @@ fn typing_edits_the_active_cell(cx: &mut TestAppContext) {
     assert_eq!(text(&view, cx, 1, 2), "");
     keys(cx, "secondary-z secondary-z");
     assert_eq!((text(&view, cx, 1, 2), text(&view, cx, 2, 2)), ("41".to_owned(), "8".to_owned()));
+}
+
+#[ui::test]
+fn dragging_a_header_edge_resizes_the_column(cx: &mut TestAppContext) {
+    let (view, cx) = open(cx, 50);
+    let widths = |view: &Entity<GridView>, cx: &mut VisualTestContext| {
+        view.read_with(cx, |view, cx| view.state().read(cx).widths().to_vec())
+    };
+    let before = widths(&view, cx);
+    let rem = cx.update(|window, _| f32::from(window.rem_size()));
+    let edge = view.read_with(cx, |view, _| view.header_edge(0)).unwrap();
+    let second = view.read_with(cx, |view, _| view.cell_bounds(0, 1)).unwrap().origin.x;
+
+    let left = MouseButton::Left;
+    cx.simulate_event(MouseDownEvent {
+        position: edge,
+        button: left,
+        click_count: 1,
+        ..Default::default()
+    });
+    let to = edge + point(px(3.0 * rem), px(0.));
+    cx.simulate_event(MouseMoveEvent {
+        position: to,
+        pressed_button: Some(left),
+        ..Default::default()
+    });
+    cx.simulate_event(MouseUpEvent { position: to, button: left, ..Default::default() });
+    settle(cx);
+
+    let after = widths(&view, cx);
+    assert!((after[0] - before[0] - 3.0).abs() < 0.01, "three rems wider: {after:?}");
+    assert_eq!(after[1..], before[1..]);
+    let moved = view.read_with(cx, |view, _| view.cell_bounds(0, 1)).unwrap().origin.x;
+    assert!((f32::from(moved - second) - 3.0 * rem).abs() < 0.5, "the next column moved over");
+    // Taking hold of an edge does not sort.
+    assert!(view.read_with(cx, |view, cx| view.state().read(cx).query().sort.is_empty()));
+
+    // A drag far to the left stops at the minimum width.
+    cx.simulate_event(MouseDownEvent {
+        position: to,
+        button: left,
+        click_count: 1,
+        ..Default::default()
+    });
+    cx.simulate_event(MouseMoveEvent {
+        position: to - point(px(1000.), px(0.)),
+        pressed_button: Some(left),
+        ..Default::default()
+    });
+    cx.simulate_event(MouseUpEvent { position: to, button: left, ..Default::default() });
+    settle(cx);
+    let least = widths(&view, cx)[0];
+    assert!(least > 0.0 && least < before[0], "narrow, not gone: {least}");
+
+    // Moving the pointer with no button held changes nothing.
+    cx.simulate_event(MouseMoveEvent {
+        position: to + point(px(200.), px(0.)),
+        ..Default::default()
+    });
+    settle(cx);
+    assert_eq!(widths(&view, cx)[0], least);
 }

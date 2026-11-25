@@ -8,27 +8,46 @@ use grid_layout::Hit;
 use ui::component::ActiveTheme as _;
 use ui::{
     App, Bounds, ClipboardItem, Context, Entity, EntityInputHandler, FocusHandle, Focusable,
-    InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent, ParentElement as _, Pixels,
-    Point, Render, ScrollEvent, Styled as _, Subscription, UTF16Selection, Window, div, point, px,
-    size,
+    InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent,
+    ParentElement as _, Pixels, Point, Render, ScrollEvent, Styled as _, Subscription,
+    UTF16Selection, Window, div, point, px, size,
 };
 
 use crate::actions::*;
 use crate::element::{Colors, GridElement, SharedFrame};
 use crate::state::GridState;
 
+/// How close to a column's right edge, in rems, a press in the header
+/// takes hold of the edge instead of sorting.
+const GRIP_REMS: f32 = 0.3125;
+
+/// A column edge being dragged.
+struct Resize {
+    column: usize,
+    from: Pixels,
+    /// The column's width when the drag began, in rems.
+    width: f32,
+}
+
 /// Draws a [`GridState`] and routes input to it.
 pub struct GridView {
     state: Entity<GridState>,
     focus: FocusHandle,
     frame: SharedFrame,
+    resize: Option<Resize>,
     _observe: Subscription,
 }
 
 impl GridView {
     pub fn new(state: Entity<GridState>, cx: &mut Context<Self>) -> Self {
         let observe = cx.observe(&state, |_, _, cx| cx.notify());
-        Self { state, focus: cx.focus_handle(), frame: SharedFrame::default(), _observe: observe }
+        Self {
+            state,
+            focus: cx.focus_handle(),
+            frame: SharedFrame::default(),
+            resize: None,
+            _observe: observe,
+        }
     }
 
     pub fn state(&self) -> &Entity<GridState> {
@@ -90,9 +109,54 @@ impl GridView {
         }
     }
 
+    /// A point on a column's right edge in the header.
+    pub fn header_edge(&self, column: usize) -> Option<Point<Pixels>> {
+        let frame = self.frame.borrow();
+        let width = frame.layout.as_ref()?.columns.size(column);
+        drop(frame);
+        Some(self.header_point(column)? + point(px(width / 2.0), px(0.)))
+    }
+
+    /// The column whose right edge is within reach of a point in the
+    /// header.
+    fn edge_at(&self, at: Point<Pixels>, window: &Window) -> Option<usize> {
+        let grip = window.rem_size() * GRIP_REMS;
+        let Hit::Header { column } = self.hit(at - point(grip, px(0.))) else { return None };
+        match self.hit(at + point(grip, px(0.))) {
+            Hit::Header { column: next } if next == column => None,
+            _ => Some(column),
+        }
+    }
+
+    pub(crate) fn mouse_move(
+        &mut self,
+        event: &MouseMoveEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(resize) = &self.resize else { return };
+        if event.pressed_button != Some(MouseButton::Left) {
+            self.resize = None;
+            return;
+        }
+        let rem = f32::from(window.rem_size());
+        let (column, rems) =
+            (resize.column, resize.width + f32::from(event.position.x - resize.from) / rem);
+        self.state.update(cx, |state, cx| state.set_width(column, rems, cx));
+    }
+
+    pub(crate) fn mouse_up(&mut self) {
+        self.resize = None;
+    }
+
     fn mouse_down(&mut self, event: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         window.focus(&self.focus, cx);
         if !self.state.update(cx, |state, cx| state.commit_edit(cx)) {
+            return;
+        }
+        if let Some(column) = self.edge_at(event.position, window) {
+            let width = self.state.read(cx).widths().get(column).copied().unwrap_or_default();
+            self.resize = Some(Resize { column, from: event.position.x, width });
             return;
         }
         let (extend, add) = (event.modifiers.shift, event.modifiers.secondary(cx));
