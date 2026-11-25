@@ -57,6 +57,10 @@ pub enum Move {
     End,
     FirstCell,
     LastCell,
+    /// The first row of the column.
+    Top,
+    /// The last row of the column.
+    Bottom,
     /// Tab: the next cell, wrapping to the next row.
     Next,
     /// Shift-Tab: the previous cell, wrapping to the previous row.
@@ -112,6 +116,32 @@ impl Selection {
         self.ranges = vec![CellRange { anchor: Cell::default(), head }];
     }
 
+    /// Selects the whole of the active cell's row, in a view with
+    /// `columns` columns. The active cell stays where it is.
+    pub fn select_row(&mut self, columns: usize) {
+        if columns == 0 {
+            return;
+        }
+        let row = self.active.row;
+        self.ranges = vec![CellRange {
+            anchor: Cell { row, column: 0 },
+            head: Cell { row, column: columns - 1 },
+        }];
+    }
+
+    /// Selects the whole of the active cell's column, in a view with
+    /// `rows` rows. The active cell stays where it is.
+    pub fn select_column(&mut self, rows: usize) {
+        if rows == 0 {
+            return;
+        }
+        let column = self.active.column;
+        self.ranges = vec![CellRange {
+            anchor: Cell { row: 0, column },
+            head: Cell { row: rows - 1, column },
+        }];
+    }
+
     /// Moves the active cell, or with `extend` the end of the last
     /// range. Returns the cell to scroll into view.
     pub fn navigate(
@@ -141,6 +171,8 @@ impl Selection {
             Move::PageDown => Cell { row: from.row.saturating_add(page).min(last_row), ..from },
             Move::Home => Cell { column: 0, ..from },
             Move::End => Cell { column: last_column, ..from },
+            Move::Top => Cell { row: 0, ..from },
+            Move::Bottom => Cell { row: last_row, ..from },
             Move::FirstCell => Cell::default(),
             Move::LastCell => Cell { row: last_row, column: last_column },
             Move::Next if from.column < last_column => Cell { column: from.column + 1, ..from },

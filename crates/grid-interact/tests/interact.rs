@@ -170,3 +170,28 @@ fn composed_text_is_replaced_until_it_is_kept() {
     line.replace(None, "", true);
     assert_eq!(line.marked(), None, "composing nothing ends composition");
 }
+
+#[test]
+fn keys_reach_the_ends_of_a_column_and_select_rows_and_columns() {
+    use grid_interact::{CellRange, Move};
+    let mut selection = Selection::at(Cell { row: 5, column: 2 });
+    assert_eq!(selection.navigate(Move::Bottom, 100, 4, 10, false), Cell { row: 99, column: 2 });
+    assert_eq!(selection.navigate(Move::Top, 100, 4, 10, true), Cell { row: 0, column: 2 });
+    assert_eq!(selection.active, Cell { row: 99, column: 2 }, "extending leaves the active cell");
+    assert_eq!(selection.ranges.last().unwrap().rows(), (0, 99));
+
+    let mut selection = Selection::at(Cell { row: 5, column: 2 });
+    selection.select_row(4);
+    let row = CellRange { anchor: Cell { row: 5, column: 0 }, head: Cell { row: 5, column: 3 } };
+    assert_eq!(
+        (selection.active, selection.ranges.clone()),
+        (Cell { row: 5, column: 2 }, vec![row])
+    );
+    selection.select_column(100);
+    assert_eq!(selection.ranges[0].rows(), (0, 99));
+    assert_eq!(selection.ranges[0].columns(), (2, 2));
+    // An empty view has no row or column to select.
+    selection.select_row(0);
+    selection.select_column(0);
+    assert_eq!(selection.ranges[0].rows(), (0, 99));
+}

@@ -255,6 +255,19 @@ impl GridState {
         }
     }
 
+    /// Selects the active cell's whole row, or its whole column.
+    pub fn select_line(&mut self, row: bool, cx: &mut Context<Self>) {
+        let (rows, columns) = (self.row_count(), self.column_count());
+        if row {
+            self.selection.select_row(columns);
+        } else {
+            self.selection.select_column(rows);
+        }
+        self.hold_selection();
+        cx.emit(GridEvent::SelectionChanged);
+        cx.notify();
+    }
+
     pub fn select_all(&mut self, cx: &mut Context<Self>) {
         let (rows, columns) = (self.row_count(), self.column_count());
         self.selection.select_all(rows, columns);
