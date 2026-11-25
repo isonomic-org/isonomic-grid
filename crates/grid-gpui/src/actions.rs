@@ -31,6 +31,11 @@ ui::actions!(
         Copy,
         Undo,
         Redo,
+        Confirm,
+        Cancel,
+        EditCell,
+        Backspace,
+        ClearCell,
     ]
 );
 
@@ -75,5 +80,10 @@ pub(crate) fn bind_keys(cx: &mut App) {
         KeyBinding::new(secondary!("c"), Copy, context),
         KeyBinding::new(secondary!("z"), Undo, context),
         KeyBinding::new(secondary!("shift-z"), Redo, context),
+        KeyBinding::new("enter", Confirm, context),
+        KeyBinding::new("escape", Cancel, context),
+        KeyBinding::new("f2", EditCell, context),
+        KeyBinding::new("backspace", Backspace, context),
+        KeyBinding::new("delete", ClearCell, context),
     ]);
 }

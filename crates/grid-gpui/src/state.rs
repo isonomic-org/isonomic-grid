@@ -25,6 +25,15 @@ pub enum GridEvent {
     SelectionChanged,
 }
 
+/// A cell being edited: the text typed so far, and why the last
+/// attempt to commit it was refused.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Editing {
+    pub cell: Cell,
+    pub text: String,
+    pub error: Option<String>,
+}
+
 /// One grid: its data, what it shows of it, and where the user is.
 pub struct GridState {
     source: MemorySource,
@@ -34,6 +43,7 @@ pub struct GridState {
     /// Width of each visible column, in rems.
     widths: Vec<f32>,
     selection: Selection,
+    editing: Option<Editing>,
     log: EditLog,
     pub(crate) scroll: (f64, f64),
     pub(crate) row_pins: Pins,
@@ -51,6 +61,7 @@ impl GridState {
             source: MemorySource::new(table),
             query: ViewQuery::default(),
             selection: Selection::at(Cell::default()),
+            editing: None,
             log: EditLog::new(UNDO_STEPS),
             scroll: (0.0, 0.0),
             row_pins: Pins::default(),
@@ -153,7 +164,9 @@ impl GridState {
             row: cell.row.min(rows.saturating_sub(1)),
             column: cell.column.min(columns.saturating_sub(1)),
         };
-        self.selection = Selection::at(clamp(self.selection.active));
+        if clamp(self.selection.active) != self.selection.active {
+            self.selection = Selection::at(clamp(self.selection.active));
+        }
         cx.emit(GridEvent::Changed);
         cx.notify();
     }
@@ -256,6 +269,69 @@ impl GridState {
         self.log.apply(&mut self.source, &[edit]).map_err(|error| error.to_string())?;
         self.changed(cx);
         Ok(())
+    }
+
+    pub fn editing(&self) -> Option<&Editing> {
+        self.editing.as_ref()
+    }
+
+    /// Starts editing the active cell. `replace` is what the user
+    /// typed to start; without it the cell's text is kept to amend.
+    pub fn begin_edit(&mut self, replace: Option<&str>, cx: &mut Context<Self>) {
+        let cell = self.selection.active;
+        let editable = self.spec(cell.column).is_some_and(|spec| spec.editable);
+        if self.editing.is_some() || !editable || self.row_id(cell.row).is_none() {
+            return;
+        }
+        let text = replace.map_or_else(|| self.cell_text(cell.row, cell.column), str::to_owned);
+        self.editing = Some(Editing { cell, text, error: None });
+        cx.notify();
+    }
+
+    /// Types into the cell being edited.
+    pub fn edit_insert(&mut self, text: &str, cx: &mut Context<Self>) {
+        if let Some(editing) = &mut self.editing {
+            editing.text.push_str(text);
+            editing.error = None;
+            cx.notify();
+        }
+    }
+
+    /// Removes the last character typed.
+    pub fn edit_backspace(&mut self, cx: &mut Context<Self>) {
+        if let Some(editing) = &mut self.editing {
+            editing.text.pop();
+            editing.error = None;
+            cx.notify();
+        }
+    }
+
+    pub fn cancel_edit(&mut self, cx: &mut Context<Self>) {
+        if self.editing.take().is_some() {
+            cx.notify();
+        }
+    }
+
+    /// Writes the edited text to its cell. On a refusal the editor
+    /// stays open and carries the reason. `true` when nothing is
+    /// left being edited.
+    pub fn commit_edit(&mut self, cx: &mut Context<Self>) -> bool {
+        let Some(editing) = self.editing.take() else { return true };
+        let Cell { row, column } = editing.cell;
+        match self.set_cell_text(row, column, &editing.text, cx) {
+            Ok(()) => true,
+            Err(error) => {
+                self.editing = Some(Editing { error: Some(error), ..editing });
+                cx.notify();
+                false
+            }
+        }
+    }
+
+    /// Empties the active cell.
+    pub fn clear_cell(&mut self, cx: &mut Context<Self>) {
+        let cell = self.selection.active;
+        let _ = self.set_cell_text(cell.row, cell.column, "", cx);
     }
 
     pub fn undo(&mut self, cx: &mut Context<Self>) {
