@@ -12,8 +12,8 @@ use grid_layout::{Axis, Band, GridLayout, Viewport};
 use ui::{
     App, Bounds, ContentMask, CursorStyle, DispatchPhase, Element, ElementId, Entity,
     GlobalElementId, Hitbox, HitboxBehavior, Hsla, InspectorElementId, IntoElement, LayoutId,
-    MouseMoveEvent, MouseUpEvent, Pixels, Point, SharedString, Style, TextAlign, TextRun, Window,
-    fill, point, px, quad, relative, size,
+    MouseMoveEvent, MouseUpEvent, Pixels, Point, Style, TextAlign, TextRun, Window, fill, point,
+    px, quad, relative, size,
 };
 
 use crate::lines::{Face, LineCache};
@@ -60,7 +60,7 @@ pub struct Colors {
 
 pub struct Painted {
     bounds: Bounds<Pixels>,
-    text: SharedString,
+    text: String,
     right: bool,
     /// A column title: drawn in the muted color.
     header: bool,
@@ -207,26 +207,33 @@ impl Element for GridElement {
                     if row_pinned { (0.0, viewport.height) } else { (top, bottom - top) };
                 at(x, y, width, height)
             };
+            // Read once what every cell would otherwise ask for again.
+            let editing = state.editing().cloned();
+            let selection = state.selection().clone();
+            let numeric: Vec<bool> =
+                columns.iter().map(|(column, ..)| state.is_numeric(*column)).collect();
+            let groups: Vec<bool> = rows.iter().map(|(row, ..)| state.is_group(*row)).collect();
             for layer in 0..=2 {
-                for (row, y, height, row_pinned) in &rows {
-                    let group = state.is_group(*row);
+                for ((row, y, height, row_pinned), group) in rows.iter().zip(&groups) {
                     for (position, (column, x, width, column_pinned)) in columns.iter().enumerate()
                     {
                         if u8::from(*row_pinned) + u8::from(*column_pinned) != layer {
                             continue;
                         }
                         // A group row is one cell as wide as the grid.
-                        if group && position > 0 {
+                        if *group && position > 0 {
                             continue;
                         }
-                        let width = if group { right_edge - x } else { *width };
+                        let width = if *group { right_edge - x } else { *width };
                         let cell = Cell { row: *row, column: *column };
-                        let editing =
-                            state.editing().filter(|editing| editing.cell == cell).cloned();
-                        let text = match &editing {
+                        let editing = editing.as_ref().filter(|editing| editing.cell == cell);
+                        let mut text = match editing {
                             Some(editing) => editing.text().to_owned(),
                             None => state.cell_text(*row, *column),
                         };
+                        if text.contains(['\n', '\r']) {
+                            text = text.replace(['\n', '\r'], " ");
+                        }
                         cells.push(Painted {
                             editing: editing.map(|editing| EditPaint {
                                 caret: editing.line.caret(),
@@ -234,15 +241,13 @@ impl Element for GridElement {
                                 refused: editing.error.is_some(),
                             }),
                             bounds: at(*x, *y, width, *height),
-                            text: text.replace(['\n', '\r'], " ").into(),
-                            right: state.is_numeric(*column)
-                                && !group
-                                && state.editing().is_none_or(|e| e.cell != cell),
+                            text,
+                            right: numeric[position] && !*group && editing.is_none(),
                             header: false,
                             opaque: *row_pinned || *column_pinned,
                             within: clip(*column_pinned, *row_pinned),
-                            selected: !group && state.selection().contains(cell),
-                            active: !group && state.selection().active == cell,
+                            selected: !*group && selection.contains(cell),
+                            active: !*group && selection.active == cell,
                         });
                     }
                 }
@@ -276,7 +281,7 @@ impl Element for GridElement {
                 for (column, x, width, _) in columns.iter().filter(|slot| slot.3 == pinned) {
                     cells.push(Painted {
                         bounds: at(*x, 0.0, *width, row_height),
-                        text: state.header_text(*column).into(),
+                        text: state.header_text(*column),
                         right: state.is_numeric(*column),
                         header: true,
                         opaque: true,
@@ -344,7 +349,7 @@ impl Element for GridElement {
             text: colors.foreground,
             header: colors.muted,
         });
-        frame.lines.begin_frame(NEW_LINES_PER_FRAME);
+        frame.lines.begin_frame(NEW_LINES_PER_FRAME, cells.len());
         window.with_content_mask(Some(ContentMask { bounds }), |window| {
             window.paint_quad(fill(bounds, colors.background));
             for cell in cells.iter() {
@@ -361,16 +366,16 @@ impl Element for GridElement {
                 let line = if cell.text.is_empty() {
                     None
                 } else {
-                    frame.lines.line(&cell.text, cell.header, || {
+                    frame.lines.line(&cell.text, cell.header, |text| {
                         let run = TextRun {
-                            len: cell.text.len(),
+                            len: text.len(),
                             font: style.font(),
                             color: if cell.header { colors.muted } else { colors.foreground },
                             background_color: None,
                             underline: None,
                             strikethrough: None,
                         };
-                        window.text_system().shape_line(cell.text.clone(), font_size, &[run], None)
+                        window.text_system().shape_line(text, font_size, &[run], None)
                     })
                 };
                 if let Some(line) = line {

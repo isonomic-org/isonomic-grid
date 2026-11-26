@@ -53,6 +53,13 @@ pub fn settle(cx: &mut VisualTestContext) {
     cx.run_until_parked();
 }
 
+/// One more frame of something still moving: a running window asks
+/// for it and is drawn again; here the view is told and drawn.
+pub fn frame(view: &Entity<GridView>, cx: &mut VisualTestContext) {
+    view.update(cx, |_, cx| cx.notify());
+    settle(cx);
+}
+
 /// Presses keys. `secondary` stands for the platform's command
 /// modifier.
 pub fn keys(cx: &mut VisualTestContext, keystrokes: &str) {

@@ -15,8 +15,13 @@ use std::collections::HashMap;
 
 use ui::{Font, Hsla, Pixels, ShapedLine, SharedString};
 
-/// Lines kept in each of the two generations.
+/// The fewest lines kept in each of the two generations.
 const GENERATION: usize = 4096;
+/// A generation holds at least this many screens of cells, so paging
+/// back and forth between two screens never drops either.
+const SCREENS: usize = 3;
+
+type Lines = HashMap<SharedString, ShapedLine>;
 
 /// What every line in the cache was shaped with.
 #[derive(Clone, PartialEq)]
@@ -28,12 +33,14 @@ pub struct Face {
 }
 
 /// A bounded cache in two generations: a line used again moves to the
-/// newer one, and when that fills the older one is dropped.
+/// newer one, and when that fills the older one is dropped. Column
+/// titles are shaped in another color and kept apart.
 #[derive(Default)]
 pub struct LineCache {
     face: Option<Face>,
-    newer: HashMap<(SharedString, bool), ShapedLine>,
-    older: HashMap<(SharedString, bool), ShapedLine>,
+    newer: Lines,
+    older: Lines,
+    titles: Lines,
     /// Lines served from the cache, and lines shaped, since the last
     /// call to [`LineCache::take_counts`].
     hits: usize,
@@ -45,6 +52,8 @@ pub struct LineCache {
     deferred: usize,
     /// The most lines one frame has shaped.
     peak: usize,
+    /// Lines a generation holds before the older one is dropped.
+    room: usize,
 }
 
 impl LineCache {
@@ -53,6 +62,7 @@ impl LineCache {
         if self.face.as_ref() != Some(&face) {
             self.newer.clear();
             self.older.clear();
+            self.titles.clear();
             self.face = Some(face);
         }
     }
@@ -62,8 +72,10 @@ impl LineCache {
         self.face.as_ref()
     }
 
-    /// Starts a frame, which may shape at most `budget` new lines.
-    pub fn begin_frame(&mut self, budget: usize) {
+    /// Starts a frame of `cells` cells, which may shape at most
+    /// `budget` new lines.
+    pub fn begin_frame(&mut self, budget: usize, cells: usize) {
+        self.room = GENERATION.max(cells.saturating_mul(SCREENS));
         self.budget = budget;
         self.allowed = budget;
         self.deferred = 0;
@@ -84,40 +96,48 @@ impl LineCache {
         self.deferred
     }
 
-    /// The shaped line for a cell's text, shaping it only if neither
-    /// generation holds it. `None` when it would have to be shaped and
-    /// this frame has already shaped all it may.
+    /// The shaped line for a cell's text, shaping it only if the cache
+    /// does not hold it. `None` when it would have to be shaped and
+    /// this frame has already shaped all it may. A shaped line is a
+    /// pair of shared pointers, so handing out a copy costs little.
     pub fn line(
         &mut self,
-        text: &SharedString,
+        text: &str,
         header: bool,
-        shape: impl FnOnce() -> ShapedLine,
-    ) -> Option<&ShapedLine> {
-        let key = (text.clone(), header);
-        if !self.newer.contains_key(&key) {
-            let line = match self.older.remove(&key) {
-                Some(line) => {
-                    self.hits += 1;
-                    line
-                }
-                None if self.budget == 0 => {
-                    self.deferred += 1;
-                    return None;
-                }
-                None => {
-                    self.budget -= 1;
-                    self.misses += 1;
-                    shape()
-                }
-            };
-            if self.newer.len() >= GENERATION {
-                self.older = std::mem::take(&mut self.newer);
-            }
-            self.newer.insert(key.clone(), line);
-        } else {
+        shape: impl FnOnce(SharedString) -> ShapedLine,
+    ) -> Option<ShapedLine> {
+        let held = if header { &self.titles } else { &self.newer };
+        if let Some(line) = held.get(text) {
             self.hits += 1;
+            return Some(line.clone());
         }
-        self.newer.get(&key)
+        let older = if header { None } else { self.older.remove_entry(text) };
+        let (key, line) = match older {
+            Some(entry) => {
+                self.hits += 1;
+                entry
+            }
+            None if self.budget == 0 => {
+                self.deferred += 1;
+                return None;
+            }
+            None => {
+                self.budget -= 1;
+                self.misses += 1;
+                let key = SharedString::from(text.to_owned());
+                (key.clone(), shape(key))
+            }
+        };
+        let held = if header { &mut self.titles } else { &mut self.newer };
+        if held.len() >= self.room {
+            let full = std::mem::take(held);
+            if !header {
+                self.older = full;
+            }
+        }
+        let held = if header { &mut self.titles } else { &mut self.newer };
+        held.insert(key, line.clone());
+        Some(line)
     }
 
     /// Hits and misses since the last call.

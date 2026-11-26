@@ -2,6 +2,21 @@
 
 Newest first.
 
+## 2026-11-26: builds on the optional faster backend
+
+- `grid-gpui` has a `fast` feature that builds the view on the component library's optional faster backend. It is off by default, and a host turns it on for its whole build or not at all, so the editor has the same feature.
+- All 49 tests pass on both backends. The shared CI job builds with every feature, which is the faster backend; the headless job builds the default one, so every pull request is checked on both.
+- Three tests leaned on every frame being built from scratch, which the faster backend does not do: it draws a view again from its last frame unless the view was told something changed. They now tell the view, as a running window does when it asks for another frame, and move the clock on for the scrollbar, which redraws a drag at most so many times a second.
+- `frames` now draws 2,496 cells, the size the budget is set for (it drew 1,950). On the two-core Linux machine, mean of 290 frames:
+
+| | default backend | faster backend |
+|---|---|---|
+| Scrolling three rows a frame | 7.8 ms | 5.4 ms |
+| A whole new screen every frame | 5.9 ms | 4.3 ms |
+| A screen a frame, back and forth | 6.9 ms | 4.6 ms |
+
+The faster backend takes about 30% off a frame as the grid stood. This is the backend alone, with the grid still painting every visible cell each frame; rows kept as retained elements are not built. Not measured on the Mac.
+
 ## 2026-11-25: measured on the Intel Mac; the frame budget is not met at the stress size
 
 macOS 15.7 on a 2.6 GHz six-core Intel laptop, native renderer, release build, three runs that agreed to within 0.3 ms. The machine was not idle (load average 7 to 12).

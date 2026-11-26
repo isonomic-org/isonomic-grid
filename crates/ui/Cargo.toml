@@ -8,6 +8,8 @@ license.workspace = true
 
 [features]
 test-support = ["isonomic-ui/test-support"]
+# The component library's optional faster backend. Off by default.
+fast = ["isonomic-ui/gpui-fast"]
 
 [dependencies]
 isonomic-ui = { git = "https://github.com/isonomic-org/isonomic-ui", rev = "834fc6a5bc7bbc30e507a5c6b31df7df57932a46" }
