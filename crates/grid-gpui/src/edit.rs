@@ -5,9 +5,10 @@
 //! clipboard. Every change goes through the edit log as one step, so
 //! one undo takes back one paste or one cleared range.
 
-use grid_core::{ColumnSpec, Edit, RowId, Value};
+use grid_core::{ColumnSpec, ColumnType, Edit, RowId, Value};
 use grid_formats::{parse_value, paste_edits, read_delimited, write_delimited};
 use grid_interact::{Cell, CellRange, LineEdit};
+use grid_query::ViewRow;
 use ui::Context;
 
 use crate::state::{GridEvent, GridState};
@@ -62,6 +63,32 @@ impl GridState {
         let spec = self.spec(column).ok_or("no such column")?.clone();
         let value = parse_value(text, &spec).map_err(|error| error.to_string())?;
         self.apply(&[Edit::SetCell { row: id, column: spec.id, value }], cx)
+    }
+
+    /// Flips the active cell if it holds a yes or no: true becomes
+    /// false, and false or nothing becomes true. Says whether the cell
+    /// was one. One step of undo, like any edit.
+    pub fn toggle_cell(&mut self, cx: &mut Context<Self>) -> bool {
+        let cell = self.selection.active;
+        let Some(spec) = self.spec(cell.column).filter(|spec| spec.editable).cloned() else {
+            return false;
+        };
+        let (Some(id), Some(schema)) =
+            (self.row_id(cell.row), self.columns.get(cell.column).copied())
+        else {
+            return false;
+        };
+        if spec.ty != ColumnType::Bool || self.editing.is_some() {
+            return false;
+        }
+        let row = self.result().rows.get(cell.row).and_then(|row| match row {
+            ViewRow::Data { row, .. } => Some(*row as usize),
+            ViewRow::Group { .. } => None,
+        });
+        let Some(row) = row else { return false };
+        let on = matches!(self.table().get(row, schema), Value::Bool(true));
+        let edit = Edit::SetCell { row: id, column: spec.id, value: Value::Bool(!on) };
+        self.apply(&[edit], cx).is_ok()
     }
 
     pub fn editing(&self) -> Option<&Editing> {

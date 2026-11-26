@@ -51,6 +51,10 @@ impl GridView {
         cx: &mut Context<Self>,
     ) {
         self.state.update(cx, |state, cx| {
+            // A space on a yes-or-no cell flips it instead of typing.
+            if text == " " && !mark && state.editing().is_none() && state.toggle_cell(cx) {
+                return;
+            }
             if state.editing().is_none() {
                 state.begin_edit(Some(""), cx);
             }
