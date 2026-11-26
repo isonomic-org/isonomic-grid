@@ -7,13 +7,16 @@ extern crate ui as gpui;
 
 mod common;
 
-use common::{active, click, open, settle, text};
-use grid_core::ColumnId;
-use grid_gpui::GridView;
+use common::{active, click, keys, open, settle, text};
+use grid_core::{ColumnId, Direction};
+use grid_gpui::{
+    ClearSort, FitColumn, GridView, HideColumn, PinThroughColumn, ShowAllColumns, SortAscending,
+    SortDescending, UnpinColumns,
+};
 use grid_interact::Cell;
 use ui::{
-    Entity, Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ScrollDelta,
-    ScrollEvent, TestAppContext, VisualTestContext, point, px,
+    Action, Entity, Focusable as _, Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent,
+    MouseUpEvent, ScrollDelta, ScrollEvent, TestAppContext, VisualTestContext, point, px,
 };
 
 fn shown(view: &Entity<GridView>, cx: &mut VisualTestContext) -> Vec<String> {
@@ -207,4 +210,76 @@ fn a_double_click_on_an_edge_fits_the_column(cx: &mut TestAppContext) {
     settle(cx);
     press(&view, cx);
     assert!(width(&view, cx) > before, "wider than it started: {}", width(&view, cx));
+}
+
+#[ui::test]
+fn the_menu_acts_on_the_column_under_the_pointer(cx: &mut TestAppContext) {
+    let (view, cx) = open(cx, 30);
+    let state = view.read_with(cx, |view, _| view.state().clone());
+    let act = |cx: &mut VisualTestContext, action: Box<dyn Action>| {
+        cx.update(|window, cx| {
+            let focus = view.read(cx).focus_handle(cx);
+            window.focus(&focus, cx);
+            window.dispatch_action(action, cx);
+        });
+        settle(cx);
+    };
+
+    // A secondary press on a title opens the menu for that column.
+    let title = view.read_with(cx, |view, _| view.header_point(2)).unwrap();
+    cx.simulate_event(MouseDownEvent {
+        position: title,
+        button: MouseButton::Right,
+        click_count: 1,
+        ..Default::default()
+    });
+    cx.simulate_event(MouseUpEvent {
+        position: title,
+        button: MouseButton::Right,
+        ..Default::default()
+    });
+    settle(cx);
+    keys(cx, "escape");
+
+    act(cx, Box::new(SortDescending));
+    assert_eq!(state.read_with(cx, |state, _| state.sorted(2)), Some(Direction::Descending));
+    assert_eq!(text(&view, cx, 0, 2), "30");
+    act(cx, Box::new(SortAscending));
+    assert_eq!(text(&view, cx, 0, 2), "1");
+    act(cx, Box::new(ClearSort));
+    assert_eq!(state.read_with(cx, |state, _| state.sorted(2)), None);
+    assert_eq!(text(&view, cx, 0, 0), "row 000000");
+
+    act(cx, Box::new(PinThroughColumn));
+    assert_eq!(state.read_with(cx, |state, _| state.pins().0.leading), 3);
+    act(cx, Box::new(UnpinColumns));
+    assert_eq!(state.read_with(cx, |state, _| state.pins().0.leading), 0);
+
+    let before = state.read_with(cx, |state, _| state.widths()[2]);
+    act(cx, Box::new(FitColumn));
+    assert_ne!(state.read_with(cx, |state, _| state.widths()[2]), before);
+
+    act(cx, Box::new(HideColumn));
+    assert_eq!(state.read_with(cx, |state, _| state.column_count()), 2);
+    assert_eq!(state.read_with(cx, |state, _| state.hidden_columns().len()), 1);
+    act(cx, Box::new(ShowAllColumns));
+    assert_eq!(state.read_with(cx, |state, _| state.column_count()), 3);
+    assert_eq!(text(&view, cx, 0, 2), "30");
+
+    // A secondary press on a cell outside the selection moves it there,
+    // and one inside the selection leaves it be.
+    let at = |view: &Entity<GridView>, cx: &mut VisualTestContext, row: usize, column: usize| {
+        let bounds = view.read_with(cx, |view, _| view.cell_bounds(row, column)).unwrap();
+        bounds.origin + point(px(4.), px(4.))
+    };
+    let position = at(&view, cx, 3, 1);
+    cx.simulate_event(MouseDownEvent {
+        position,
+        button: MouseButton::Right,
+        click_count: 1,
+        ..Default::default()
+    });
+    settle(cx);
+    keys(cx, "escape");
+    assert_eq!(active(&view, cx), Cell { row: 3, column: 1 });
 }

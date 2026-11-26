@@ -46,6 +46,14 @@ ui::actions!(
         EditCell,
         Backspace,
         ClearCell,
+        SortAscending,
+        SortDescending,
+        ClearSort,
+        PinThroughColumn,
+        UnpinColumns,
+        FitColumn,
+        HideColumn,
+        ShowAllColumns,
     ]
 );
 

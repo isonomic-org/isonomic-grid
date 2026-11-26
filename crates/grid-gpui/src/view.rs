@@ -3,10 +3,12 @@
 
 use std::ops::Range;
 
+use grid_core::Direction;
 use grid_interact::{LineEdit, Move};
 use grid_layout::Hit;
 use ui::base::Scrollbar;
 use ui::component::ActiveTheme as _;
+use ui::component::menu::ContextMenuExt as _;
 use ui::{
     App, Bounds, ClipboardItem, Context, Entity, FocusHandle, Focusable, InteractiveElement as _,
     IntoElement, MouseButton, ParentElement as _, Pixels, Point, Render, Styled as _, Subscription,
@@ -28,6 +30,8 @@ pub struct GridView {
     /// Whether a drag held past an edge scrolled on the last step, and
     /// so should take another when the grid is next drawn.
     pub(crate) autoscroll: bool,
+    /// The column last pressed with the secondary button, for the menu.
+    pub(crate) menu_column: Option<usize>,
     /// Whether the pointer is over a column edge it could drag.
     pub(crate) over_edge: bool,
     scroll: GridScrollHandle,
@@ -43,6 +47,7 @@ impl GridView {
             frame: SharedFrame::default(),
             drag: None,
             autoscroll: false,
+            menu_column: None,
             over_edge: false,
             scroll: GridScrollHandle::default(),
             _observe: observe,
@@ -222,6 +227,7 @@ impl Render for GridView {
             colors,
         };
         let header = px(self.frame.borrow().layout.as_ref().map_or(0.0, |layout| layout.header));
+        let view = cx.entity();
         let bar = Scrollbar::width();
         div()
             .id("isonomic-grid")
@@ -331,6 +337,22 @@ impl Render for GridView {
                 });
             }))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::mouse_down))
+            .on_mouse_down(MouseButton::Right, cx.listener(Self::secondary_press))
+            .on_action(cx.listener(|this, _: &SortAscending, _, cx| {
+                this.sort_column(Some(Direction::Ascending), cx)
+            }))
+            .on_action(cx.listener(|this, _: &SortDescending, _, cx| {
+                this.sort_column(Some(Direction::Descending), cx)
+            }))
+            .on_action(cx.listener(|this, _: &ClearSort, _, cx| this.sort_column(None, cx)))
+            .on_action(cx.listener(|this, _: &PinThroughColumn, _, cx| this.pin_through_column(cx)))
+            .on_action(cx.listener(|this, _: &UnpinColumns, _, cx| this.unpin_columns(cx)))
+            .on_action(cx.listener(|this, _: &HideColumn, _, cx| this.hide_menu_column(cx)))
+            .on_action(cx.listener(|this, _: &ShowAllColumns, _, cx| this.show_all_columns(cx)))
+            .on_action(cx.listener(|this, _: &FitColumn, window, cx| {
+                let column = this.menu_target(cx);
+                this.fit_column(column, window, cx)
+            }))
             .on_scroll(cx.listener(Self::scroll))
             .child(element)
             .child(
@@ -351,5 +373,6 @@ impl Render for GridView {
                     .h(bar)
                     .child(Scrollbar::horizontal(&self.scroll).viewport_from_layout()),
             )
+            .context_menu(move |menu, _, cx| view.read(cx).build_menu(menu, cx))
     }
 }
