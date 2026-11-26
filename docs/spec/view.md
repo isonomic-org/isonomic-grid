@@ -12,7 +12,8 @@
 ## B8. Rendering
 
 - **One element.** `Grid` paints each region: backgrounds, grid lines, then cell contents clipped to their bounds, then selection and focus overlays.
-- **Text cache.** A shaped line is cached by its text in a bounded cache of two generations, emptied when the font, size or colors change; a line used again moves to the newer generation and the older one is dropped when the newer fills. Scrolling reuses shaped lines, and truncation is decided at paint from the cell width. A frame shapes a bounded number of new lines and leaves the rest of the cells empty for the frames that follow.
+- **Text cache.** A shaped line is cached by its text in a bounded cache of two generations, emptied when the font, size or colors change; a line used again moves to the newer generation and the older one is dropped when the newer fills. The cache shares each line and hands out a pointer, never a copy. A data cell's line is also kept by row ID and column for one version of the table's data, so a cell drawn again is not read or formatted again.
+- **Text layers.** The cells of a band (the scrolling cells, each pinned band, the titles) do not overlap, so a band's backgrounds are painted first and then all its text in one layer, glyph by glyph, instead of a layer for each line. Scrolling reuses shaped lines, and truncation is decided at paint from the cell width. A frame shapes a bounded number of new lines and leaves the rest of the cells empty for the frames that follow.
 - **Scrolling.** The element handles wheel and trackpad input itself and keeps (anchor row, offset) in 64-bit for rows and a pixel offset for columns. It implements the UI library's scrollbar interface (viewport bounds, offset, content size) over a range scaled to fit 32-bit pixels, so the standard scrollbars, their dragging and their auto-hide work unchanged.
 - **Painters.** Each column type paints its cells. Built-in painters cover text with truncation, numbers with alignment, checkboxes, choice pills, links, dates, progress bars and sparklines.
 
@@ -75,7 +76,7 @@ Budgets are for the Intel test Mac, release build, one million rows unless state
 
 | Measure | Budget | Measured in isolation |
 |---|---|---|
-| Frame time while scrolling, about 2,500 visible cells | under 6 ms; 60 fps held | **Not met on the Intel Mac:** 6.5 ms at 1,950 cells with every line cached, 8.4 ms scrolling, for the grid's share before the renderer. 5.5 to 6.5 ms on the Linux machine. See `docs/status.md` |
+| Frame time while scrolling, about 2,500 visible cells | under 6 ms; 60 fps held | 3.7 to 3.9 ms at 2,496 cells on the Linux machine, for the grid's share before the renderer. The earlier code took 7.8 ms there and 8.4 ms on the Intel Mac at 1,950 cells. **Not yet measured on the Mac since.** See `docs/status.md` |
 | Open 1 million rows by 50 columns (memory) to first frame | under 100 ms after load | n/a |
 | Sort by one numeric key | under 150 ms, off the main thread | 51 ms |
 | Sort by two keys | under 200 ms | 68 ms |

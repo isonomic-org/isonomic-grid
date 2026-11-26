@@ -190,3 +190,41 @@ fn cut_paste_and_clear_work_on_ranges(cx: &mut TestAppContext) {
     keys(cx, "secondary-z secondary-z");
     assert_eq!(column(&view, cx, 2), "5,5,5,7");
 }
+
+#[ui::test]
+fn what_is_drawn_follows_edits_undo_and_sorting(cx: &mut TestAppContext) {
+    let (view, cx) = open(cx, 10);
+    let drawn = |view: &Entity<GridView>, cx: &mut VisualTestContext, row: usize, column: usize| {
+        view.update(cx, |view, cx| view.drawn_text(row, column, cx))
+    };
+    // Every cell in view was drawn with its own text.
+    let all_match = |view: &Entity<GridView>, cx: &mut VisualTestContext| {
+        for row in 0..10 {
+            for column in 0..3 {
+                let shown = drawn(view, cx, row, column);
+                assert_eq!(shown, Some(text(view, cx, row, column)), "row {row}, column {column}");
+            }
+        }
+    };
+    all_match(&view, cx);
+
+    // An edit is drawn at once, though the cell's line was being kept.
+    view.update(cx, |view, cx| {
+        view.state().update(cx, |state, cx| state.set_cell_text(1, 2, "41", cx)).unwrap()
+    });
+    settle(cx);
+    assert_eq!(drawn(&view, cx, 1, 2).as_deref(), Some("41"));
+    all_match(&view, cx);
+    keys(cx, "secondary-z");
+    assert_eq!(drawn(&view, cx, 1, 2).as_deref(), Some("9"));
+    keys(cx, "secondary-shift-z");
+    assert_eq!(drawn(&view, cx, 1, 2).as_deref(), Some("41"));
+
+    // Sorted, each row keeps its own lines and nothing is shaped again.
+    view.read_with(cx, |view, _| view.take_line_counts());
+    view.update(cx, |view, cx| view.state().update(cx, |state, cx| state.sort_by(2, cx)));
+    settle(cx);
+    all_match(&view, cx);
+    let (_, shaped) = view.read_with(cx, |view, _| view.take_line_counts());
+    assert_eq!(shaped, 1, "only the title, which gained its arrow");
+}

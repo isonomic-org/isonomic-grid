@@ -5,8 +5,8 @@
 //! visible cells, laying them out and painting them into a scene. The
 //! time the renderer then takes to draw that scene is not included.
 //!
-//! `cargo run --release -p grid-gpui --example frames`, and with
-//! `--features grid-gpui/fast` for the optional faster backend.
+//! `cargo run --release -p grid-gpui --example frames [rows] [frames]`,
+//! and with `--features grid-gpui/fast` for the optional faster backend.
 
 extern crate ui as gpui;
 
@@ -19,14 +19,12 @@ use grid_gpui::{GridState, GridView};
 use ui::assets::Assets;
 use ui::{AppContext as _, Bounds, HeadlessAppContext, WindowBounds, WindowOptions, px, size};
 
-const ROWS: usize = 100_000;
 const COLUMNS: usize = 64;
-const FRAMES: usize = 300;
 /// Narrow columns, so all sixty-four fit across the window: with the
 /// header, about 2,500 cells in view, the size the budget is set for.
 const WIDTH_REMS: f32 = 3.2;
 
-fn table() -> Table {
+fn table(rows: usize) -> Table {
     let specs = (0..COLUMNS)
         .map(|column| {
             let kind = [ColumnType::Text, ColumnType::Int, ColumnType::Float][column % 3];
@@ -36,7 +34,7 @@ fn table() -> Table {
     let mut table = Table::new(specs);
     let mut seed = 0x2545_F491_4F6C_DD1Du64;
     let mut row = Vec::with_capacity(COLUMNS);
-    for _ in 0..ROWS {
+    for _ in 0..rows {
         row.clear();
         for column in 0..COLUMNS {
             seed ^= seed << 13;
@@ -66,6 +64,10 @@ fn report(label: &str, times: &mut [Duration], cells: usize, (hits, misses): (us
 }
 
 fn main() -> ExitCode {
+    let number = |place: usize, or: usize| {
+        std::env::args().nth(place).and_then(|text| text.parse().ok()).unwrap_or(or)
+    };
+    let (rows, frames) = (number(1, 100_000), number(2, 300).max(20));
     let mut cx = HeadlessAppContext::with_platform(
         ui::platform::current_platform(true).text_system(),
         Arc::new(Assets),
@@ -87,7 +89,7 @@ fn main() -> ExitCode {
     let mut made = None;
     let opened = cx.update(|cx| {
         ui::open_window(options, cx, |_, cx| {
-            let state = cx.new(|cx| GridState::new(table(), cx));
+            let state = cx.new(|cx| GridState::new(table(rows), cx));
             state.update(cx, |state, cx| {
                 for column in 0..COLUMNS {
                     state.set_width(column, WIDTH_REMS, cx);
@@ -110,10 +112,10 @@ fn main() -> ExitCode {
         ("a screen a frame, back and forth", 1400.0, true),
     ];
     for (label, step, back) in passes {
-        let mut times = Vec::with_capacity(FRAMES);
+        let mut times = Vec::with_capacity(frames);
         let mut cells = 0;
         cx.update(|cx| grid.read(cx).take_line_counts());
-        for frame in 0..FRAMES {
+        for frame in 0..frames {
             let y = if back { (frame % 2) as f64 * step } else { frame as f64 * step };
             let drawn = cx.update_window(handle, |_, window, cx| {
                 state.update(cx, |state, cx| state.scroll_to(0.0, y, cx));
