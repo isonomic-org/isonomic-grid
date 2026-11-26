@@ -2,6 +2,12 @@
 
 Newest first.
 
+## 2026-11-26: a menu for columns and cells
+
+- A secondary click on a column title or a cell opens the component library's context menu: sort ascending or descending (the current one is checked), clear the sort, pin the columns up to this one, unpin, fit the column to its text, hide it, show hidden columns, cut, copy and paste. Entries that would do nothing are disabled. A secondary click on a cell outside the selection selects it first; inside the selection it leaves the selection alone.
+- Every entry is an action the view answers, so a host can bind keys to them or use them from its own menus (`docs/keys.md`). `GridState` gained `sort`, `sorted` and `hidden_columns`.
+- Checked in a headless window by a test that opens the menu and runs each action, on both backends, and in a real window on Linux: the menu opens under the pointer and choosing "Sort descending" sorts the column and closes it. Not tried on the Mac.
+
 ## 2026-11-26: a frame at the budget's size takes half the time
 
 Three changes to how cells are painted, all in this repository. The entry of 25 November said nothing left in this repository's code would close the gap to the frame budget. **That was wrong:** two of the three things below were this code's own waste.

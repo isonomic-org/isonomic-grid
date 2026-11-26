@@ -159,7 +159,12 @@ impl GridView {
 
     /// Sizes a column to the widest text it shows now, its title
     /// included.
-    fn fit_column(&mut self, column: usize, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn fit_column(
+        &mut self,
+        column: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let Some(face) = self.frame.borrow().lines.face().cloned() else { return };
         let rows = self.visible_rows();
         let texts: Vec<String> = self.state.update(cx, |state, _| {

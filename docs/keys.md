@@ -46,3 +46,8 @@ Text a column cannot hold is refused: the cell stays open, marked, until the tex
 | Drag a column's right edge | Resize it |
 | Double click a column's right edge | Fit it to the text it shows |
 | Wheel, scrollbars | Scroll |
+| Secondary click on a column title or a cell | Open the menu: sort ascending or descending, clear the sort, pin the columns up to this one, unpin, fit the column, hide it, show hidden columns, cut, copy, paste. A cell outside the selection becomes the selection first |
+
+## Actions without a key
+
+A host can bind these or put them in its own menus. They act on the column last opened with a secondary click, or else on the active cell's column: `SortAscending`, `SortDescending`, `ClearSort`, `PinThroughColumn`, `UnpinColumns`, `FitColumn`, `HideColumn`, `ShowAllColumns`.

@@ -4,7 +4,7 @@
 //! Which columns show, in what order, and what is pinned. Positions
 //! here count the columns shown, left to right.
 
-use grid_core::ColumnId;
+use grid_core::{ColumnId, Direction, SortKey};
 use grid_layout::Pins;
 use ui::Context;
 
@@ -28,6 +28,30 @@ impl GridState {
     pub fn shown_columns(&self) -> Vec<ColumnId> {
         let specs = self.table().specs();
         self.columns.iter().filter_map(|index| Some(specs.get(*index)?.id.clone())).collect()
+    }
+
+    /// The table's columns that are not shown, in the table's order.
+    pub fn hidden_columns(&self) -> Vec<ColumnId> {
+        let specs = self.table().specs();
+        (0..specs.len())
+            .filter(|index| !self.columns.contains(index))
+            .map(|index| specs[index].id.clone())
+            .collect()
+    }
+
+    /// The direction the view sorts a shown column in, if it does.
+    pub fn sorted(&self, column: usize) -> Option<Direction> {
+        let id = &self.spec(column)?.id;
+        self.query().sort.iter().find(|key| &key.column == id).map(|key| key.direction)
+    }
+
+    /// Sorts by one shown column in a direction, or by nothing.
+    pub fn sort(&mut self, column: usize, to: Option<Direction>, cx: &mut Context<Self>) {
+        let Some(id) = self.spec(column).map(|spec| spec.id.clone()) else { return };
+        let sort = to.map(|direction| SortKey { column: id, direction }).into_iter().collect();
+        let mut query = self.query().clone();
+        query.sort = sort;
+        self.set_query(query, cx);
     }
 
     /// Moves a shown column to another place among them.

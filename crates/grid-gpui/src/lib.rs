@@ -20,6 +20,7 @@ mod element;
 mod held;
 mod input;
 mod lines;
+mod menu;
 mod paint;
 mod pointer;
 mod scroll;
