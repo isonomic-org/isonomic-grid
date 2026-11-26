@@ -24,6 +24,7 @@ mod menu;
 mod paint;
 mod pointer;
 mod scroll;
+mod search;
 mod state;
 mod view;
 

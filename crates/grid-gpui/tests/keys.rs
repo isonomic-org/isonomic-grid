@@ -8,7 +8,7 @@ extern crate ui as gpui;
 
 mod common;
 
-use common::{active, click, keys, open, text};
+use common::{active, click, keys, open, settle, text};
 use grid_gpui::GridView;
 use grid_interact::Cell;
 use ui::{Entity, Modifiers, TestAppContext, VisualTestContext};
@@ -109,4 +109,45 @@ fn a_grid_with_nothing_in_it_takes_every_key_and_click(cx: &mut TestAppContext) 
             view.update(cx, |view, cx| view.state().update(cx, |state, _| state.row_count()));
         assert_eq!(rows, if columns == 0 { 0 } else { 2 }, "with {columns} columns");
     }
+}
+
+#[ui::test]
+fn the_search_bar_narrows_the_rows(cx: &mut TestAppContext) {
+    let (view, cx) = open(cx, 30);
+    let rows = |view: &Entity<GridView>, cx: &mut VisualTestContext| {
+        view.update(cx, |view, cx| view.state().update(cx, |state, _| state.row_count()))
+    };
+    let search = |view: &Entity<GridView>, cx: &mut VisualTestContext| {
+        view.read_with(cx, |view, cx| view.state().read(cx).search().to_owned())
+    };
+    assert_eq!(rows(&view, cx), 30);
+
+    // Opened, the bar has the keyboard: typing narrows the rows and
+    // edits no cell.
+    keys(cx, "secondary-f");
+    cx.simulate_input("INFRA");
+    settle(cx);
+    assert_eq!(search(&view, cx), "INFRA");
+    assert_eq!(rows(&view, cx), 10, "case is ignored");
+    assert_eq!(text(&view, cx, 0, 0), "row 000002");
+    keys(cx, "backspace delete");
+    assert_eq!(rows(&view, cx), 10, "the bar took the keys: INFR still finds infra");
+    assert_eq!(text(&view, cx, 0, 1), "infra");
+
+    // Enter goes to the rows found; the search stays.
+    keys(cx, "enter down");
+    assert_eq!(active(&view, cx).row, 1);
+    assert_eq!(rows(&view, cx), 10);
+
+    // Back in the bar, text nowhere finds no rows, and Escape shows
+    // them all again.
+    keys(cx, "secondary-f");
+    cx.simulate_input("zzz");
+    settle(cx);
+    assert_eq!(rows(&view, cx), 0);
+    keys(cx, "escape");
+    assert_eq!(search(&view, cx), "");
+    assert_eq!(rows(&view, cx), 30);
+    keys(cx, "down");
+    assert_eq!(rows(&view, cx), 30);
 }

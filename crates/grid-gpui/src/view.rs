@@ -7,6 +7,7 @@ use grid_core::Direction;
 use grid_interact::{LineEdit, Move};
 use grid_layout::Hit;
 use ui::base::Scrollbar;
+use ui::base::input::InputState;
 use ui::component::ActiveTheme as _;
 use ui::component::menu::ContextMenuExt as _;
 use ui::{
@@ -32,6 +33,10 @@ pub struct GridView {
     pub(crate) autoscroll: bool,
     /// The column last pressed with the secondary button, for the menu.
     pub(crate) menu_column: Option<usize>,
+    /// The search bar's field, made the first time the bar opens, and
+    /// whether the bar is open.
+    pub(crate) search_input: Option<Entity<InputState>>,
+    pub(crate) searching: bool,
     /// Whether the pointer is over a column edge it could drag.
     pub(crate) over_edge: bool,
     scroll: GridScrollHandle,
@@ -48,6 +53,8 @@ impl GridView {
             drag: None,
             autoscroll: false,
             menu_column: None,
+            search_input: None,
+            searching: false,
             over_edge: false,
             scroll: GridScrollHandle::default(),
             _observe: observe,
@@ -229,7 +236,7 @@ impl Render for GridView {
         let header = px(self.frame.borrow().layout.as_ref().map_or(0.0, |layout| layout.header));
         let view = cx.entity();
         let bar = Scrollbar::width();
-        div()
+        let grid = div()
             .id("isonomic-grid")
             .key_context(CONTEXT)
             .track_focus(&self.focus)
@@ -338,6 +345,7 @@ impl Render for GridView {
             }))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::mouse_down))
             .on_mouse_down(MouseButton::Right, cx.listener(Self::secondary_press))
+            .on_action(cx.listener(|this, _: &Search, window, cx| this.open_search(window, cx)))
             .on_action(cx.listener(|this, _: &SortAscending, _, cx| {
                 this.sort_column(Some(Direction::Ascending), cx)
             }))
@@ -373,6 +381,9 @@ impl Render for GridView {
                     .h(bar)
                     .child(Scrollbar::horizontal(&self.scroll).viewport_from_layout()),
             )
-            .context_menu(move |menu, _, cx| view.read(cx).build_menu(menu, cx))
+            .context_menu(move |menu, _, cx| view.read(cx).build_menu(menu, cx));
+        // The search bar sits beside the cells, not inside them, so
+        // that keys typed in it are not also the grid's.
+        div().relative().size_full().child(grid).children(self.search_bar(header, cx))
     }
 }
