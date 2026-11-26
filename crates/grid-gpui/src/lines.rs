@@ -12,7 +12,9 @@
 //! them in over the next few frames, so no single frame stalls.
 
 use std::collections::HashMap;
+use std::rc::Rc;
 
+use grid_core::RowId;
 use ui::{Font, Hsla, Pixels, ShapedLine, SharedString};
 
 /// The fewest lines kept in each of the two generations.
@@ -21,7 +23,15 @@ const GENERATION: usize = 4096;
 /// back and forth between two screens never drops either.
 const SCREENS: usize = 3;
 
-type Lines = HashMap<SharedString, ShapedLine>;
+/// A shaped line is a few kilobytes wide, most of it room for
+/// decorations a cell never has, so the caches share each one and hand
+/// out the pointer.
+pub type Line = Rc<ShapedLine>;
+type Lines = HashMap<SharedString, Line>;
+
+/// A data cell: its row, and its column's place in the table.
+pub type CellKey = (RowId, usize);
+type Cells = HashMap<CellKey, Line>;
 
 /// What every line in the cache was shaped with.
 #[derive(Clone, PartialEq)]
@@ -41,6 +51,13 @@ pub struct LineCache {
     newer: Lines,
     older: Lines,
     titles: Lines,
+    /// The lines of data cells by row and column, in two generations
+    /// like the text, so a cell drawn again is found without its
+    /// text being read or formatted. They hold for one version of the
+    /// table's data.
+    newer_cells: Cells,
+    older_cells: Cells,
+    data: Option<u64>,
     /// Lines served from the cache, and lines shaped, since the last
     /// call to [`LineCache::take_counts`].
     hits: usize,
@@ -63,6 +80,8 @@ impl LineCache {
             self.newer.clear();
             self.older.clear();
             self.titles.clear();
+            self.newer_cells.clear();
+            self.older_cells.clear();
             self.face = Some(face);
         }
     }
@@ -70,6 +89,43 @@ impl LineCache {
     /// The font, size and colors the last frame drew with.
     pub fn face(&self) -> Option<&Face> {
         self.face.as_ref()
+    }
+
+    /// Says which version of the table's data is about to be drawn.
+    /// The lines kept by cell are dropped when it is a new one; the
+    /// lines kept by text stay, so little is shaped again.
+    pub fn use_data(&mut self, version: u64) {
+        if self.data != Some(version) {
+            self.newer_cells.clear();
+            self.older_cells.clear();
+            self.data = Some(version);
+        }
+    }
+
+    /// The line a data cell was last drawn with, if it is still kept.
+    pub fn cell(&mut self, key: CellKey) -> Option<Line> {
+        if let Some(line) = self.newer_cells.get(&key) {
+            self.hits += 1;
+            return Some(line.clone());
+        }
+        let line = self.older_cells.remove(&key)?;
+        self.hits += 1;
+        self.keep(key, line.clone());
+        Some(line)
+    }
+
+    /// The text of the line a data cell was last drawn with.
+    pub fn drawn(&self, key: CellKey) -> Option<&str> {
+        let line = self.newer_cells.get(&key).or_else(|| self.older_cells.get(&key))?;
+        Some(line.text.as_ref())
+    }
+
+    /// Keeps the line a data cell was drawn with.
+    pub fn keep(&mut self, key: CellKey, line: Line) {
+        if self.newer_cells.len() >= self.room.max(GENERATION) {
+            self.older_cells = std::mem::take(&mut self.newer_cells);
+        }
+        self.newer_cells.insert(key, line);
     }
 
     /// Starts a frame of `cells` cells, which may shape at most
@@ -98,14 +154,13 @@ impl LineCache {
 
     /// The shaped line for a cell's text, shaping it only if the cache
     /// does not hold it. `None` when it would have to be shaped and
-    /// this frame has already shaped all it may. A shaped line is a
-    /// pair of shared pointers, so handing out a copy costs little.
+    /// this frame has already shaped all it may.
     pub fn line(
         &mut self,
         text: &str,
         header: bool,
         shape: impl FnOnce(SharedString) -> ShapedLine,
-    ) -> Option<ShapedLine> {
+    ) -> Option<Line> {
         let held = if header { &self.titles } else { &self.newer };
         if let Some(line) = held.get(text) {
             self.hits += 1;
@@ -125,7 +180,7 @@ impl LineCache {
                 self.budget -= 1;
                 self.misses += 1;
                 let key = SharedString::from(text.to_owned());
-                (key.clone(), shape(key))
+                (key.clone(), Rc::new(shape(key)))
             }
         };
         let held = if header { &mut self.titles } else { &mut self.newer };

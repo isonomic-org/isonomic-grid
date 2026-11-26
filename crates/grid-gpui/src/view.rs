@@ -58,6 +58,16 @@ impl GridView {
         self.frame.borrow().painted
     }
 
+    /// The text a data cell was last painted with, while its line is
+    /// still kept: what is on the screen, which is the cell's text only
+    /// if nothing stale was drawn.
+    pub fn drawn_text(&self, row: usize, column: usize, cx: &mut Context<Self>) -> Option<String> {
+        let key = self
+            .state
+            .update(cx, |state, _| Some((state.row_id(row)?, *state.columns.get(column)?)))?;
+        self.frame.borrow().lines.drawn(key).map(str::to_owned)
+    }
+
     /// How many cell texts were served from the shaped-line cache, and
     /// how many had to be shaped, since the last call.
     pub fn take_line_counts(&self) -> (usize, usize) {

@@ -12,17 +12,18 @@ use grid_layout::{Axis, Band, GridLayout, Viewport};
 use ui::{
     App, Bounds, ContentMask, CursorStyle, DispatchPhase, Element, ElementId, Entity,
     GlobalElementId, Hitbox, HitboxBehavior, Hsla, InspectorElementId, IntoElement, LayoutId,
-    MouseMoveEvent, MouseUpEvent, Pixels, Point, Style, TextAlign, TextRun, Window, fill, point,
-    px, quad, relative, size,
+    MouseMoveEvent, MouseUpEvent, Pixels, Point, Style, Window, fill, point, px, quad, relative,
+    size,
 };
 
-use crate::lines::{Face, LineCache};
+use crate::lines::{CellKey, Face, Line, LineCache};
+use crate::paint::{Brush, paint_band};
 use crate::state::GridState;
 
 /// The line between rows.
-const HAIRLINE: Pixels = px(1.);
+pub(crate) const HAIRLINE: Pixels = px(1.);
 /// The caret, and the rule under a cell being edited.
-const CARET: Pixels = px(2.);
+pub(crate) const CARET: Pixels = px(2.);
 /// The most lines of text never seen before that one frame shapes.
 /// The rest are left for the frames that follow.
 const NEW_LINES_PER_FRAME: usize = 256;
@@ -59,29 +60,36 @@ pub struct Colors {
 }
 
 pub struct Painted {
-    bounds: Bounds<Pixels>,
-    text: String,
-    right: bool,
+    pub(crate) bounds: Bounds<Pixels>,
+    /// Empty when `line` already holds the cell's shaped text.
+    pub(crate) text: String,
+    pub(crate) line: Option<Line>,
+    /// The row and column a data cell shows, to keep its line by.
+    pub(crate) key: Option<CellKey>,
+    pub(crate) right: bool,
+    /// Cells that share a number do not overlap and are painted
+    /// together; a higher number is painted over a lower one.
+    pub(crate) band: u8,
     /// A column title: drawn in the muted color.
-    header: bool,
+    pub(crate) header: bool,
     /// In a pinned row or column, or the header: drawn over whatever
     /// scrolls beneath it, on its own background.
-    opaque: bool,
+    pub(crate) opaque: bool,
     /// What the cell's outline may be drawn within, so that an active
     /// cell scrolled partly under a pinned band is cut off by it.
-    within: Bounds<Pixels>,
-    selected: bool,
+    pub(crate) within: Bounds<Pixels>,
+    pub(crate) selected: bool,
     /// The cell the keyboard acts on.
-    active: bool,
+    pub(crate) active: bool,
     /// Being edited: where the caret is, what is being composed, and
     /// whether the last commit was refused.
-    editing: Option<EditPaint>,
+    pub(crate) editing: Option<EditPaint>,
 }
 
-struct EditPaint {
-    caret: usize,
-    marked: Option<std::ops::Range<usize>>,
-    refused: bool,
+pub(crate) struct EditPaint {
+    pub(crate) caret: usize,
+    pub(crate) marked: Option<std::ops::Range<usize>>,
+    pub(crate) refused: bool,
 }
 
 pub struct GridElement {
@@ -158,6 +166,8 @@ impl Element for GridElement {
         };
         let moved = self.scroll.take_moved();
         let mut rules = Vec::new();
+        let mut frame = self.frame.borrow_mut();
+        let lines = &mut frame.lines;
         let (cells, layout, viewport, page) = self.state.update(cx, |state, _| {
             // A scrollbar that was dragged since the last frame says
             // where to be; the layout below clamps what it asked for.
@@ -213,8 +223,12 @@ impl Element for GridElement {
             let numeric: Vec<bool> =
                 columns.iter().map(|(column, ..)| state.is_numeric(*column)).collect();
             let groups: Vec<bool> = rows.iter().map(|(row, ..)| state.is_group(*row)).collect();
+            let ids: Vec<_> = rows.iter().map(|(row, ..)| state.row_id(*row)).collect();
+            lines.use_data(state.table().version());
             for layer in 0..=2 {
-                for ((row, y, height, row_pinned), group) in rows.iter().zip(&groups) {
+                for (((row, y, height, row_pinned), group), id) in
+                    rows.iter().zip(&groups).zip(&ids)
+                {
                     for (position, (column, x, width, column_pinned)) in columns.iter().enumerate()
                     {
                         if u8::from(*row_pinned) + u8::from(*column_pinned) != layer {
@@ -227,9 +241,17 @@ impl Element for GridElement {
                         let width = if *group { right_edge - x } else { *width };
                         let cell = Cell { row: *row, column: *column };
                         let editing = editing.as_ref().filter(|editing| editing.cell == cell);
-                        let mut text = match editing {
-                            Some(editing) => editing.text().to_owned(),
-                            None => state.cell_text(*row, *column),
+                        // A cell drawn a moment ago still has its line;
+                        // its text is not even read again.
+                        let key = match (editing, id, state.columns.get(*column)) {
+                            (None, Some(id), Some(schema)) => Some((*id, *schema)),
+                            _ => None,
+                        };
+                        let line = key.and_then(|key| lines.cell(key));
+                        let mut text = match (editing, &line) {
+                            (Some(editing), _) => editing.text().to_owned(),
+                            (None, Some(_)) => String::new(),
+                            (None, None) => state.cell_text(*row, *column),
                         };
                         if text.contains(['\n', '\r']) {
                             text = text.replace(['\n', '\r'], " ");
@@ -242,7 +264,10 @@ impl Element for GridElement {
                             }),
                             bounds: at(*x, *y, width, *height),
                             text,
+                            line,
+                            key,
                             right: numeric[position] && !*group && editing.is_none(),
+                            band: layer,
                             header: false,
                             opaque: *row_pinned || *column_pinned,
                             within: clip(*column_pinned, *row_pinned),
@@ -282,7 +307,10 @@ impl Element for GridElement {
                     cells.push(Painted {
                         bounds: at(*x, 0.0, *width, row_height),
                         text: state.header_text(*column),
+                        line: None,
+                        key: None,
                         right: state.is_numeric(*column),
+                        band: 3 + u8::from(pinned),
                         header: true,
                         opaque: true,
                         within: clip(pinned, true),
@@ -299,7 +327,6 @@ impl Element for GridElement {
             size(bounds.size.width, (bounds.size.height - px(layout.header)).max(px(0.))),
         );
         self.scroll.record(body, &layout, &viewport);
-        let mut frame = self.frame.borrow_mut();
         frame.painted = cells.len();
         frame.rules = rules;
         frame.page = page;
@@ -327,6 +354,7 @@ impl Element for GridElement {
         let font_size = style.font_size.to_pixels(window.rem_size());
         let line_height = window.line_height();
         let padding = window.rem_size() * PADDING_REMS;
+        let brush = Brush { colors, font: style.font(), font_size, line_height, padding };
         // A drag of a column edge follows the pointer wherever it goes,
         // so the view hears every move and release in the window.
         let view = self.view.clone();
@@ -352,72 +380,8 @@ impl Element for GridElement {
         frame.lines.begin_frame(NEW_LINES_PER_FRAME, cells.len());
         window.with_content_mask(Some(ContentMask { bounds }), |window| {
             window.paint_quad(fill(bounds, colors.background));
-            for cell in cells.iter() {
-                if cell.opaque {
-                    window.paint_quad(fill(cell.bounds, colors.background));
-                }
-                if cell.selected {
-                    window.paint_quad(fill(cell.bounds, colors.selection));
-                }
-                let mut origin = cell.bounds.origin + point(padding, padding);
-                let inner = cell.bounds.size.width - padding * 2.0;
-                let mut caret_x = px(0.);
-                let mut composed = None;
-                let line = if cell.text.is_empty() {
-                    None
-                } else {
-                    frame.lines.line(&cell.text, cell.header, |text| {
-                        let run = TextRun {
-                            len: text.len(),
-                            font: style.font(),
-                            color: if cell.header { colors.muted } else { colors.foreground },
-                            background_color: None,
-                            underline: None,
-                            strikethrough: None,
-                        };
-                        window.text_system().shape_line(text, font_size, &[run], None)
-                    })
-                };
-                if let Some(line) = line {
-                    if let Some(edit) = &cell.editing {
-                        caret_x = line.x_for_index(edit.caret.min(cell.text.len()));
-                        // Text longer than the cell slides left so the
-                        // caret stays in it.
-                        origin.x -= (caret_x - inner + CARET).max(px(0.));
-                        composed = edit.marked.as_ref().map(|marked| {
-                            (line.x_for_index(marked.start), line.x_for_index(marked.end))
-                        });
-                    }
-                    let align = if cell.right { TextAlign::Right } else { TextAlign::Left };
-                    if line.width > inner || cell.editing.is_some() {
-                        // Text wider than its cell is cut at the cell's edge.
-                        let mask = Some(ContentMask { bounds: cell.bounds });
-                        window.with_content_mask(mask, |window| {
-                            let _ = line.paint(origin, line_height, align, Some(inner), window, cx);
-                        });
-                    } else {
-                        let _ = line.paint(origin, line_height, align, Some(inner), window, cx);
-                    }
-                }
-                if let Some(edit) = &cell.editing {
-                    let caret =
-                        Bounds::new(origin + point(caret_x, px(0.)), size(CARET, line_height));
-                    window.paint_quad(fill(caret, colors.caret));
-                    if let Some((from, to)) = composed {
-                        // What an input method is still composing is underlined.
-                        let under = Bounds::new(
-                            origin + point(from, line_height - HAIRLINE),
-                            size(to - from, HAIRLINE),
-                        );
-                        window.paint_quad(fill(under, colors.foreground));
-                    }
-                    let mark = Bounds::new(
-                        cell.bounds.origin + point(px(0.), cell.bounds.size.height - CARET),
-                        size(cell.bounds.size.width, CARET),
-                    );
-                    let color = if edit.refused { colors.error } else { colors.caret };
-                    window.paint_quad(fill(mark, color));
-                }
+            for band in cells.chunk_by(|one, next| one.band == next.band) {
+                paint_band(band, &mut frame.lines, &brush, bounds, window);
             }
             frame.lines.end_frame();
             if frame.lines.deferred() > 0 {
