@@ -33,6 +33,15 @@
 
 Text a column cannot hold is refused: the cell stays open, marked, until the text is fixed or the edit is cancelled. A paste with such a field changes nothing.
 
+## Search
+
+| Key | What it does |
+|---|---|
+| Command-F (Control-F off macOS) | Open the search bar |
+| Typing in the bar | Show only the rows that hold the text in some text column, ignoring case and accents |
+| Enter | Go to the rows found; the search stays, and the bar stays to show it |
+| Escape, in the bar | Close the bar and show every row again |
+
 ## Pointer
 
 | Gesture | Does |

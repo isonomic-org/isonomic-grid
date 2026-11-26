@@ -5,6 +5,8 @@ use ui::{App, KeyBinding};
 
 /// The key context the grid view sets; bindings apply only inside.
 pub const CONTEXT: &str = "IsonomicGrid";
+/// The key context of the search bar.
+pub const SEARCH_CONTEXT: &str = "IsonomicGridSearch";
 
 ui::actions!(
     grid,
@@ -54,6 +56,7 @@ ui::actions!(
         FitColumn,
         HideColumn,
         ShowAllColumns,
+        Search,
     ]
 );
 
@@ -117,5 +120,7 @@ pub(crate) fn bind_keys(cx: &mut App) {
         KeyBinding::new("f2", EditCell, context),
         KeyBinding::new("backspace", Backspace, context),
         KeyBinding::new("delete", ClearCell, context),
+        KeyBinding::new(secondary!("f"), Search, context),
     ]);
+    cx.bind_keys([KeyBinding::new("escape", Cancel, Some(SEARCH_CONTEXT))]);
 }
