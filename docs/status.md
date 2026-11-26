@@ -2,6 +2,11 @@
 
 Newest first.
 
+## 2026-11-26: a space flips a yes-or-no cell
+
+- Space on a cell of a yes-or-no column flips it instead of starting to type: true becomes false, and false or an empty cell becomes true. It is one edit through the source, so undo takes it back. In any other column a space is typed as before. `GridState::toggle_cell` does it without the key.
+- A test flips a false cell twice, fills an empty one and undoes it, and types a space into a text cell. Both backends.
+
 ## 2026-11-26: a search bar
 
 - Command-F opens a search bar over the top right of the cells. Typing shows only the rows that hold the text in some text column, ignoring case and accents, and the bar says how many rows that is. Enter goes to the rows found and keeps the search; Escape in the bar closes it and shows every row again (`docs/keys.md`).

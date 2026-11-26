@@ -9,11 +9,12 @@ extern crate ui as gpui;
 mod common;
 
 use common::{active, click, keys, open, settle, text};
-use grid_gpui::GridView;
+use grid_core::{ColumnSpec, ColumnType, Table, Value};
+use grid_gpui::{GridState, GridView};
 use grid_interact::Cell;
 use ui::{
-    ClipboardItem, Entity, EntityInputHandler as _, Modifiers, MouseButton, MouseDownEvent,
-    MouseUpEvent, TestAppContext, VisualTestContext, point, px,
+    AppContext as _, ClipboardItem, Entity, EntityInputHandler as _, Modifiers, MouseButton,
+    MouseDownEvent, MouseUpEvent, TestAppContext, VisualTestContext, point, px,
 };
 
 #[ui::test]
@@ -227,4 +228,49 @@ fn what_is_drawn_follows_edits_undo_and_sorting(cx: &mut TestAppContext) {
     all_match(&view, cx);
     let (_, shaped) = view.read_with(cx, |view, _| view.take_line_counts());
     assert_eq!(shaped, 1, "only the title, which gained its arrow");
+}
+
+#[ui::test]
+fn a_space_flips_a_yes_or_no_cell(cx: &mut TestAppContext) {
+    cx.update(|cx| {
+        ui::init(cx);
+        grid_gpui::init(cx);
+    });
+    let (view, cx) = cx.add_window_view(|window, cx| {
+        let specs = vec![
+            ColumnSpec::new("name", "Name", ColumnType::Text),
+            ColumnSpec::new("done", "Done", ColumnType::Bool),
+        ];
+        let mut table = Table::new(specs);
+        table.push(&[Value::text("first"), Value::Bool(false)]).unwrap();
+        table.push(&[Value::text("second"), Value::Null]).unwrap();
+        let state = cx.new(|cx| GridState::new(table, cx));
+        let view = GridView::new(state, cx);
+        window.focus(&ui::Focusable::focus_handle(&view, cx), cx);
+        view
+    });
+    settle(cx);
+
+    click(&view, cx, 0, 1, Modifiers::none());
+    cx.simulate_input(" ");
+    settle(cx);
+    assert_eq!(text(&view, cx, 0, 1), "true");
+    cx.simulate_input(" ");
+    settle(cx);
+    assert_eq!(text(&view, cx, 0, 1), "false");
+    // An empty cell becomes true, and undo empties it again.
+    click(&view, cx, 1, 1, Modifiers::none());
+    cx.simulate_input(" ");
+    settle(cx);
+    assert_eq!(text(&view, cx, 1, 1), "true");
+    keys(cx, "secondary-z");
+    assert_eq!(text(&view, cx, 1, 1), "");
+
+    // In any other cell a space is typed.
+    click(&view, cx, 0, 0, Modifiers::none());
+    cx.simulate_input(" ");
+    cx.simulate_input("x");
+    settle(cx);
+    keys(cx, "enter");
+    assert_eq!(text(&view, cx, 0, 0), " x");
 }

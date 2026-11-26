@@ -32,6 +32,7 @@
 | Command with Z, Shift with Command and Z | Undo and redo |
 
 Text a column cannot hold is refused: the cell stays open, marked, until the text is fixed or the edit is cancelled. A paste with such a field changes nothing.
+| Space, on a yes-or-no cell | Flip it: true becomes false; false or empty becomes true |
 
 ## Search
 
