@@ -7,7 +7,7 @@ Newest first.
 - `grid-gpui` has a `fast` feature that builds the view on the component library's optional faster backend. It is off by default, and a host turns it on for its whole build or not at all, so the editor has the same feature.
 - All 49 tests pass on both backends. The shared CI job builds with every feature, which is the faster backend; the headless job builds the default one, so every pull request is checked on both.
 - Three tests leaned on every frame being built from scratch, which the faster backend does not do: it draws a view again from its last frame unless the view was told something changed. They now tell the view, as a running window does when it asks for another frame, and move the clock on for the scrollbar, which redraws a drag at most so many times a second.
-- `frames` now draws 2,496 cells, the size the budget is set for (it drew 1,950), and takes the number of rows and frames as arguments. On the two-core Linux machine, mean of 290 frames:
+- `frames` now draws 2,496 cells, the size the budget is set for (it drew 1,950). On the two-core Linux machine, mean of 290 frames:
 
 | | default backend | faster backend |
 |---|---|---|
