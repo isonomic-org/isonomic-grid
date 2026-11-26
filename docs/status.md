@@ -2,6 +2,27 @@
 
 Newest first.
 
+## 2026-11-26: measured on the Intel Mac; scrolling is inside the frame budget
+
+macOS 15.7 on a 2.6 GHz six-core Intel laptop, release build.
+
+- All 53 tests pass there, on the default backend and on the faster one.
+- `frames`, 2,496 cells a frame, the grid's share before the renderer. Three runs on a quiet machine (load average under 2), and three more at the latest commit with the machine busier (7 to 11) that agree with them:
+
+| | default backend | faster backend |
+|---|---|---|
+| Scrolling three rows a frame | 5.4 to 5.8 ms (99th percentile 8.5 to 10.9 ms) | 5.2 ms (8.7 to 10.3 ms) |
+| A whole new screen every frame | 7.0 to 7.2 ms | 4.6 ms |
+| A screen a frame, back and forth | 3.5 to 3.8 ms | 4.5 to 4.6 ms |
+
+**What this means.** Milestone 0 asks for a frame under 6 ms at 2,500 visible cells while scrolling, with more than 95% of text from the cache. Scrolling three rows a frame serves 97.6% from the cache and takes 5.4 to 5.8 ms on the default backend and 5.2 ms on the faster one. **That part of the budget is met**, on the code that took 8.4 ms at 1,950 cells yesterday. The margin on the default backend is thin.
+
+**What is over.** A scrollbar drag that shows a whole new screen every frame takes 7.0 to 7.2 ms on the default backend, because shaping the 256 new lines a frame allows costs more on this machine than on Linux. It is 4.6 ms on the faster backend. Lowering the number of new lines a frame would bring it under, at the price of text arriving later after a jump; that has not been done.
+
+**What cannot be claimed yet.** The budget is written for a frame with the semantic shadow on. The shadow is not built, so its cost is not in these numbers.
+
+**Not measured:** the renderer's own time, a real display. Nobody has used the playground by hand on the Mac, where the column menu, the search bar and flipping a yes-or-no cell are new since the last time it was opened there. The frames were not rendered to images there again after the paint change; on Linux they are identical to the pixel.
+
 ## 2026-11-26: a space flips a yes-or-no cell
 
 - Space on a cell of a yes-or-no column flips it instead of starting to type: true becomes false, and false or an empty cell becomes true. It is one edit through the source, so undo takes it back. In any other column a space is typed as before. `GridState::toggle_cell` does it without the key.

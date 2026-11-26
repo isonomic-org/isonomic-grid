@@ -76,7 +76,7 @@ Budgets are for the Intel test Mac, release build, one million rows unless state
 
 | Measure | Budget | Measured in isolation |
 |---|---|---|
-| Frame time while scrolling, about 2,500 visible cells | under 6 ms; 60 fps held | 3.7 to 3.9 ms at 2,496 cells on the Linux machine, for the grid's share before the renderer. The earlier code took 7.8 ms there and 8.4 ms on the Intel Mac at 1,950 cells. **Not yet measured on the Mac since.** See `docs/status.md` |
+| Frame time while scrolling, about 2,500 visible cells | under 6 ms; 60 fps held | **Met on the Intel Mac for scrolling:** 5.4 to 5.8 ms at 2,496 cells on the default backend, 5.2 ms on the faster one, for the grid's share before the renderer and without the semantic shadow, which is not built. A scrollbar drag that shows a new screen every frame is 7.0 to 7.2 ms on the default backend. 3.7 to 3.9 ms on the Linux machine. See `docs/status.md` |
 | Open 1 million rows by 50 columns (memory) to first frame | under 100 ms after load | n/a |
 | Sort by one numeric key | under 150 ms, off the main thread | 51 ms |
 | Sort by two keys | under 200 ms | 68 ms |
