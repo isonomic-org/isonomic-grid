@@ -30,4 +30,4 @@ What Isonomic Grid needs from repositories it does not own. Each is written to b
 
 **Why now.** It fixes the name and the feature flag before anything depends on them. The module stays empty until the grid's windowed sources are built.
 
-**Note.** The SDK is Apache-2.0 and this engine is GPL-3.0-or-later. An adapter that links the engine is GPL, so the adapter itself should live where both are already linked, not in the SDK.
+**Note.** The SDK and this engine are both GPL-3.0-or-later since 28 Nov 2026, so the licence no longer decides this. To keep the SDK free of engine dependencies, the adapter should still live where both are already linked, not in the SDK.
